@@ -1325,9 +1325,12 @@ def exportListPdf(id_lista):
             f.write(tex_final)
 
         try:
+            cmd = [pdflatex_bin, '-interaction=nonstopmode', '-halt-on-error']
+            if os.name == 'nt':
+                cmd.append('--enable-installer')
+            cmd.extend(['-output-directory', tmpdir, tex_path])
             subprocess.run(
-                [pdflatex_bin, '-interaction=nonstopmode', '-halt-on-error', '--enable-installer',
-                 '-output-directory', tmpdir, tex_path],
+                cmd,
                 cwd=tmpdir,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
