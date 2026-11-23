@@ -108,17 +108,43 @@ O modelo utiliza especialização total e exclusiva a partir da tabela `usuario`
 
 ## Instalação e Execução
 
+### Pré-requisitos
+
+- **Python 3.10+**
+- **PostgreSQL** instalado e em execução localmente
+- **MiKTeX** (Windows) ou **TeX Live** (Linux/macOS) com `pdflatex` no `PATH` *(necessário apenas para exportar listas de exercícios em PDF)*
+
 ### 1. Clonar o repositório e instalar dependências
 
 ```bash
 git clone https://github.com/Clara-M-Grossl/banco-questoes-PES.git
 cd banco-questoes-PES
+
+python -m venv .venv
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
 ### 2. Configurar o PostgreSQL e Variáveis de Ambiente
 
-Crie o banco `pes_questoes` no PostgreSQL e copie o arquivo `.env.example` (ou defina as variáveis no sistema):
+Crie o banco de dados no PostgreSQL:
+
+```sql
+CREATE DATABASE pes_questoes;
+```
+
+Copie o arquivo de exemplo de variáveis de ambiente (carregado automaticamente pela aplicação em `database/conexao.py`):
+
+```bash
+cp .env.example .env
+# No Windows (CMD): copy .env.example .env
+```
+
+Edite o arquivo `.env` com as credenciais da sua máquina:
 
 **Parâmetros de Configuração:**
 
