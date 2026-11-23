@@ -111,8 +111,8 @@ O modelo utiliza especialização total e exclusiva a partir da tabela `usuario`
 ### 1. Clonar o repositório e instalar dependências
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
-cd codigo
+git clone https://github.com/Clara-M-Grossl/banco-questoes-PES.git
+cd banco-questoes-PES
 pip install -r requirements.txt
 ```
 
