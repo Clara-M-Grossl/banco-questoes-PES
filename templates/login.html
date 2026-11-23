@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acesso — Banco de Questões Cursinho PES</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo-pes.png') }}" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo-pes.png') }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&family=Nunito:wght@700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="login-page">
+      <div class="login-box">
+        <div class="login-header">
+          <img src="{{ url_for('servePesLogo') }}" alt="Cursinho PES" />
+          <h1>Cursinho PES</h1>
+          <p>Acesse o Banco de Questões com sua conta</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %} {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %} {% endif %} {% endwith %}
+
+        <form action="{{ url_for('loginPage') }}" method="POST">
+          <div style="margin-bottom: 16px">
+            <label class="field-label" for="email"
+              >E-mail institucional ou pessoal</label
+            >
+            <input
+              type="email"
+              id="email"
+              name="email"
+              placeholder="seu.email@exemplo.com"
+              required
+              autofocus
+            />
+          </div>
+
+          <div style="margin-bottom: 22px">
+            <label class="field-label" for="senha">Senha</label>
+            <input
+              type="password"
+              id="senha"
+              name="senha"
+              placeholder="Digite sua senha"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary"
+            style="width: 100%; min-height: 50px; font-size: 16px"
+          >
+            Entrar na plataforma
+          </button>
+        </form>
+
+        {% if contas_exemplo %}
+        <details
+          style="
+            margin-top: 24px;
+            border-top: 1px solid var(--outline);
+            padding-top: 14px;
+            font-size: 13px;
+            color: var(--ink-subtle);
+          "
+        >
+          <summary style="cursor: pointer; font-weight: 700">Testes</summary>
+          <div
+            style="
+              margin-top: 10px;
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+            "
+          >
+            {% for c in contas_exemplo %}
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 6px 10px;
+                background: var(--surface);
+                border-radius: 8px;
+              "
+            >
+              <span><strong>{{ c.perfil }}</strong>: {{ c.email }}</span>
+              <code style="font-family: var(--font-mono)">{{ c.senha }}</code>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </body>
+</html>

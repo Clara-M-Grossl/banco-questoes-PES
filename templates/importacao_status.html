@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Importando questões — Cursinho PES{% endblock %}
+{% block page_title %}Importação de Questões{% endblock %}
+{% block page_subtitle %}O arquivo está sendo processado, você pode acompanhar o andamento abaixo{% endblock %}
+
+{% block content %}
+    <section class="card" style="max-width: 640px; margin: 24px auto; text-align: center; padding: 40px 32px;">
+        <div id="icone-estado" style="margin-bottom: 18px;">
+            <svg id="spinner" width="52" height="52" viewBox="0 0 50 50" style="animation: girar 1s linear infinite;">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="#E2E8F0" stroke-width="5"></circle>
+                <path d="M25 5 a20 20 0 0 1 20 20" fill="none" stroke="#5E1728" stroke-width="5" stroke-linecap="round"></path>
+            </svg>
+        </div>
+        <h2 id="titulo-estado" style="font-family: var(--font-display); font-size: 22px; margin-bottom: 8px;">Processando arquivo</h2>
+        <p id="mensagem-estado" style="color: var(--ink-muted); font-size: 16px;">Aguarde...</p>
+        <p id="tempo-estado" style="color: var(--ink-subtle); font-size: 13px; margin-top: 14px; font-family: var(--font-mono);">0s</p>
+
+        <div id="acoes-estado" style="display: none; margin-top: 24px; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('questionsPage') }}" class="btn btn-primary" id="btn-ver-questoes">Ver no Banco de Questões</a>
+            <a href="{{ url_for('reviewQuestionsPage') }}" class="btn btn-green" id="btn-revisar-materias">Revisar Matérias / Conteúdos</a>
+            <a href="{{ url_for('newQuestionPage') }}" class="btn btn-outline">Importar outro arquivo</a>
+        </div>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+<style>@keyframes girar { to { transform: rotate(360deg); } }</style>
+<script>
+    const inicio = Date.now();
+    const relogio = setInterval(() => {
+        document.getElementById('tempo-estado').textContent = Math.floor((Date.now() - inicio) / 1000) + 's';
+    }, 1000);
+
+    async function pollImportStatus() {
+        try {
+            const resp = await fetch("{{ url_for('importStatusApi', job_id=job_id) }}");
+            const dados = await resp.json();
+            document.getElementById('mensagem-estado').textContent = dados.mensagem;
+
+            if (dados.estado === 'concluido') {
+                clearInterval(relogio);
+                clearInterval(intervalo);
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('titulo-estado').textContent = 'Importação concluída';
+                const btnVer = document.getElementById('btn-ver-questoes');
+                if (btnVer && Array.isArray(dados.ids) && dados.ids.length > 0) {
+                    if (dados.ids.length === 1) {
+                        const qid = dados.ids[0];
+                        btnVer.href = "{{ url_for('questionsPage') }}?questao=" + encodeURIComponent(qid);
+                        btnVer.textContent = 'Ver questão cadastrada (Q' + String(qid).padStart(3, '0') + ')';
+                    } else {
+                        btnVer.href = "{{ url_for('questionsPage') }}?ids=" + encodeURIComponent(dados.ids.join(','));
+                        btnVer.textContent = 'Ver as ' + dados.ids.length + ' questões importadas';
+                    }
+                }
+                document.getElementById('acoes-estado').style.display = 'flex';
+            } else if (dados.estado === 'erro') {
+                clearInterval(relogio);
+                clearInterval(intervalo);
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('titulo-estado').textContent = 'Não foi possível importar';
+                document.getElementById('btn-ver-questoes').style.display = 'none';
+                document.getElementById('acoes-estado').style.display = 'flex';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const intervalo = setInterval(pollImportStatus, 2000);
+    pollImportStatus();
+</script>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+
+{% block title %}Revisar Questões e Erros Sinalizados - Cursinho PES{% endblock %}
+{% block page_title %}Central de Revisão{% endblock %}
+{% block page_subtitle %}Corrija questões sinalizadas (matéria, gabarito, gramática ou formatação){% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url_for('newQuestionPage') }}" class="btn btn-outline">← Voltar ao Cadastro</a>
+{% endblock %}
+
+{% block content %}
+    {% if usuario_logado.perfil == 'gestao' %}
+        <section class="card" style="border-left: 4px solid var(--primary);">
+            <h2 style="font-family: var(--font-display); font-size: 19px; color: var(--ink); margin-bottom: 4px;">
+                Reclassificar Questões do ENEM
+            </h2>
+            <p style="font-size: 14px; color: var(--ink-subtle); margin-bottom: 14px;">
+                Aplica o classificador nas <strong>{{ total_enem_bd }}</strong> questões do ENEM, separando por <strong>Matéria, Frente e Conteúdo</strong>.
+            </p>
+
+            <form action="{{ url_for('reclassifyEnemRoute') }}" method="POST" enctype="multipart/form-data">
+                <div class="form-grid-2" style="margin-bottom: 14px;">
+                    <div>
+                        <label class="field-label">Qual edição do ENEM reclassificar?</label>
+                        <select name="ano_enem">
+                            <option value="">Todas as edições do ENEM ({{ total_enem_bd }} questões)</option>
+                            {% for ano_b, qtd_b in anos_enem_bd %}
+                                <option value="{{ ano_b }}">ENEM {{ ano_b }} ({{ qtd_b }} questões)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="field-label">Microdados oficiais do INEP (<code>ITENS_PROVA_AAAA.csv</code>) - opcional</label>
+                        <input type="file" name="microdados_inep_csv" accept=".csv">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="min-height: 44px;">
+                    Executar Classificação por Matéria e Conteúdo
+                </button>
+            </form>
+        </section>
+    {% endif %}
+
+    <section class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div>
+                <h2 style="font-family: var(--font-display); font-size: 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    Questões Sinalizadas para Revisão
+                    <span class="pill {{ 'pill-sun' if questoes_pendentes else 'pill-leaf' }}" style="font-family: var(--font-mono); font-size: 13px;">
+                        {{ questoes_pendentes|length }} exibida(s)
+                    </span>
+                </h2>
+                <p style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px;">
+                    Inclui questões sinalizadas por alunos/professores e pendências detectadas automaticamente na importação.
+                </p>
+            </div>
+        </div>
+
+        <div class="tags-row" style="margin-bottom: 18px;">
+            <a href="{{ url_for('reviewQuestionsPage') }}"
+               class="btn {{ 'btn-primary' if not filtro_tag else 'btn-outline' }}"
+               style="min-height: 36px; padding: 6px 14px; font-size: 13px;">
+                Todas
+            </a>
+            {% for tag_nome in tags_revisao_lista %}
+                <a href="{{ url_for('reviewQuestionsPage', tag=tag_nome) }}"
+                   class="btn {{ 'btn-primary' if filtro_tag|lower == tag_nome|lower else 'btn-outline' }}"
+                   style="min-height: 36px; padding: 6px 14px; font-size: 13px;">
+                    {{ tag_nome }} ({{ contagem_tags.get(tag_nome, 0) }})
+                </a>
+            {% endfor %}
+        </div>
+
+        {% if not questoes_pendentes %}
+            <div style="text-align: center; padding: 36px 16px; background: var(--leaf-soft); border: 1px solid var(--leaf); border-radius: 16px;">
+                <strong style="font-family: var(--font-display); font-size: 18px; color: var(--leaf-deep); display: block; margin-bottom: 6px;">
+                    Nenhuma pendência encontrada neste filtro!
+                </strong>
+                <p style="font-size: 14px; color: var(--ink-muted); margin-bottom: 14px;">
+                    Todas as questões estão revisadas e confirmadas.
+                </p>
+                <a href="{{ url_for('questionsPage') }}" class="btn btn-primary">Ir para o Banco de Questões</a>
+            </div>
+        {% else %}
+            <form action="{{ url_for('saveQuestionReviewRoute') }}" method="POST" id="form-revisar-lote">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 14px;">
+                    <button type="submit" class="btn btn-green">
+                        Confirmar Matéria de Todas ({{ questoes_pendentes|length }})
+                    </button>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    {% for q in questoes_pendentes %}
+                        <div style="background: var(--surface); border: 1.5px solid var(--outline); border-radius: 16px; padding: 18px 20px;">
+                            <div class="tags-row" style="margin-bottom: 10px;">
+                                <span class="pill pill-code">Q{{ '%03d'|format(q.id_questao) }}</span>
+                                <span class="pill pill-leaf">{{ q.instituicao }} {{ q.ano }}</span>
+                                {% for tr in q.tags_revisao %}
+                                    <span class="pill {{ 'pill-coral' if 'Erro' in tr else 'pill-sun' }}">{{ tr }}</span>
+                                {% endfor %}
+                                {% if q.disciplinas_str %}
+                                    <span class="pill pill-primary">{{ q.disciplinas_str }} — {{ q.assuntos_str }}</span>
+                                {% endif %}
+                            </div>
+
+                            {% if q.relatos %}
+                                <div style="background: var(--sun-soft); border: 1px solid var(--sun); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: var(--sun-deep);">
+                                    <strong>Relatos enviados:</strong>
+                                    {% for rel in q.relatos %}
+                                        <div style="margin-top: 4px;">
+                                            • <strong>{{ rel.autor }}</strong> ({{ rel.data }}): {{ rel.detalhes }}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div style="font-size: 15px; color: var(--ink); line-height: 1.55; margin-bottom: 14px; max-height: 160px; overflow-y: auto; padding-right: 6px;">
+                                {{ q.enunciado|formatQuestionText|safe }}
+                            </div>
+
+                        
+                            <div id="editor-q-{{ q.id_questao }}" style="display: none; background: var(--bg); border: 1px solid var(--outline-strong); border-radius: 14px; padding: 16px; margin-bottom: 14px;">
+                                <div style="margin-bottom: 12px;">
+                                    <label class="field-label">Editar Enunciado (suporta LaTeX com $...$)</label>
+                                    <textarea name="enunciado_{{ q.id_questao }}" rows="4">{{ q.enunciado }}</textarea>
+                                </div>
+                                <div>
+                                    <label class="field-label">Editar Alternativas / Proposições e Gabarito</label>
+                                    {% for id_a, val_p, txt_a, corr_a in q.alternativas %}
+                                        {% set rot = ('%02d'|format(val_p)) if q.tipo == 'Somatoria' else (['A','B','C','D','E'][(loop.index0) % 5]) %}
+                                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                            <span class="option-badge" style="width: 34px; height: 34px; font-size: 13px;">{{ rot }}</span>
+                                            <input type="text" name="alt_texto_{{ id_a }}" value="{{ txt_a }}" style="min-height: 38px;">
+                                            <label style="display: flex; align-items: center; gap: 5px; font-size: 13px; white-space: nowrap;">
+                                                <input type="checkbox" name="alt_correta_{{ id_a }}" {% if corr_a %}checked{% endif %} style="width: 17px; min-height: 17px;"> Correta
+                                            </label>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end;">
+                                <div>
+                                    <label class="field-label">Disciplina / Frente / Conteúdo</label>
+                                    <select name="assunto_{{ q.id_questao }}" class="select-assunto-dinamico" onchange="handleTopicSelectChange(this)">
+                                        {% for id_a, d_nome, d_frente, a_nome in assuntos %}
+                                            <option value="{{ id_a }}" {% if q.id_assunto_atual == id_a %}selected{% endif %}>
+                                                {{ d_nome }} ({{ d_frente }}) — {{ a_nome }}
+                                            </option>
+                                        {% endfor %}
+                                        <option value="__novo__">+ Cadastrar novo conteúdo...</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-outline" style="min-height: 44px;" onclick="toggleQuestionEditor({{ q.id_questao }}, this)">
+                                    Editar texto / gabarito
+                                </button>
+                                <button type="submit" name="id_questao_unica" value="{{ q.id_questao }}" class="btn btn-primary" style="min-height: 44px;">
+                                    Salvar e Resolver
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </form>
+        {% endif %}
+    </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleQuestionEditor(idQ, btn) {
+        const box = document.getElementById(`editor-q-${idQ}`);
+        const abrindo = box.style.display === 'none';
+        box.style.display = abrindo ? 'block' : 'none';
+        btn.textContent = abrindo ? 'Ocultar editor' : 'Editar texto / gabarito';
+    }
+</script>
+{% include '_modal_novo_conteudo.html' %}
+{% endblock %}

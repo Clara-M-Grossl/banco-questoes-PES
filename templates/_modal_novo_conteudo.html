@@ -1,0 +1,151 @@
+<div class="modal-backdrop" id="modal-novo-conteudo" onclick="if (event.target === this) closeNewTopicModal();">
+    <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h3 style="font-family: var(--font-display); font-size: 20px; color: var(--ink);">Novo Assunto</h3>
+                <p style="font-size: 13px; color: var(--ink-subtle); margin-top: 2px;">
+                   
+                </p>
+            </div>
+            <button type="button" class="modal-close" onclick="closeNewTopicModal()">×</button>
+        </div>
+
+        <form id="form-novo-conteudo" onsubmit="submitNewTopic(event)" data-no-scroll-keep="1">
+            <div style="margin-bottom: 14px;">
+                <label class="field-label">Disciplina e Frente</label>
+                <select id="novo-conteudo-disciplina" required>
+                    {% for id_d, d_nome, d_frente in disciplinas_lista %}
+                        <option value="{{ id_d }}">{{ d_nome }} — Frente {{ d_frente }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label class="field-label">Nome do Conteúdo / Assunto</label>
+                <input
+                    type="text"
+                    id="novo-conteudo-nome"
+                    maxlength="100"
+                    placeholder="Ex: Ondulatória e Acústica, Eletroquímica, Modernismo..."
+                    required
+                />
+            </div>
+
+            <div class="feedback-strip" id="novo-conteudo-feedback" style="margin-bottom: 14px;"></div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-outline" onclick="closeNewTopicModal()">Cancelar</button>
+                <button type="submit" class="btn btn-leaf" id="btn-salvar-novo-conteudo">Cadastrar Conteúdo</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let activeTopicSelect = null;
+
+    function rememberTopicValues() {
+        document.querySelectorAll('select.select-assunto-dinamico').forEach(sel => {
+            if (sel.value !== '__novo__') {
+                sel.dataset.prevVal = sel.value;
+            }
+        });
+    }
+
+    function handleTopicSelectChange(selectEl) {
+        if (selectEl.value === '__novo__') {
+            activeTopicSelect = selectEl;
+            openNewTopicModal();
+        } else {
+            selectEl.dataset.prevVal = selectEl.value;
+        }
+    }
+
+    function openNewTopicModal() {
+        const input = document.getElementById('novo-conteudo-nome');
+        const fb = document.getElementById('novo-conteudo-feedback');
+        if (input) input.value = '';
+        if (fb) {
+            fb.className = 'feedback-strip';
+            fb.textContent = '';
+        }
+        document.getElementById('modal-novo-conteudo').classList.add('open');
+        setTimeout(() => { if (input) input.focus(); }, 60);
+    }
+
+    function closeNewTopicModal(keepSelection) {
+        document.getElementById('modal-novo-conteudo').classList.remove('open');
+        if (!keepSelection && activeTopicSelect && activeTopicSelect.value === '__novo__') {
+            activeTopicSelect.value = activeTopicSelect.dataset.prevVal || activeTopicSelect.options[0].value;
+        }
+        activeTopicSelect = null;
+    }
+
+    async function submitNewTopic(ev) {
+        ev.preventDefault();
+        const idDisciplina = document.getElementById('novo-conteudo-disciplina').value;
+        const nome = document.getElementById('novo-conteudo-nome').value.trim();
+        const fb = document.getElementById('novo-conteudo-feedback');
+        const btn = document.getElementById('btn-salvar-novo-conteudo');
+
+        if (!nome) {
+            fb.className = 'feedback-strip show err';
+            fb.textContent = 'Informe o nome do conteúdo.';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+        try {
+            const resp = await fetch('/api/assuntos/novo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_disciplina: Number(idDisciplina), nome: nome })
+            });
+            const data = await resp.json();
+            if (!data.ok) {
+                fb.className = 'feedback-strip show err';
+                fb.textContent = data.erro || 'Não foi possível cadastrar o conteúdo.';
+                return;
+            }
+
+            const newVal = String(data.id_assunto);
+            document.querySelectorAll('select.select-assunto-dinamico').forEach(sel => {
+                const prefix = sel.dataset.prefix || '';
+                let existing = Array.from(sel.options).find(o => o.value === newVal);
+                if (!existing) {
+                    const opt = document.createElement('option');
+                    opt.value = newVal;
+                    opt.textContent = prefix + data.label;
+                    const newOptMarker = Array.from(sel.options).find(o => o.value === '__novo__');
+                    if (newOptMarker) {
+                        sel.insertBefore(opt, newOptMarker);
+                    } else {
+                        sel.appendChild(opt);
+                    }
+                }
+            });
+
+            if (activeTopicSelect) {
+                activeTopicSelect.value = newVal;
+                activeTopicSelect.dataset.prevVal = newVal;
+            }
+            closeNewTopicModal(true);
+        } catch (e) {
+            fb.className = 'feedback-strip show err';
+            fb.textContent = 'Erro de conexão ao cadastrar conteúdo.';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Cadastrar Conteúdo';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        rememberTopicValues();
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('modal-novo-conteudo').classList.contains('open')) {
+                closeNewTopicModal(false);
+            }
+        });
+    });
+</script>

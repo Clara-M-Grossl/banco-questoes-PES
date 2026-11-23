@@ -1,0 +1,3 @@
+# Evita que o Prettier do VS Code quebre tags Jinja2 ({% ... %} e {{ ... }}) nos templates HTML
+templates/*.html
+templates_tex/*.tex

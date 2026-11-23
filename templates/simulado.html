@@ -1,0 +1,629 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo_simulado }} — Cursinho PES{% endblock %}
+{% block page_title %}{{ titulo_simulado }}{% endblock %}
+{% block page_subtitle %}{{ subtitulo_simulado }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url_for('questionsPage') }}" class="btn btn-outline" onclick="return simuladoFinalizado || confirm('Sair agora cancelará o simulado em andamento. Deseja voltar ao Banco de Questões?');">
+        Voltar ao Banco
+    </a>
+{% endblock %}
+
+{% block content %}
+    <div class="simulado-bar" id="simulado-bar">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="timer-chip" title="Tempo total ativo no simulado">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 2.5"></path><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path><path d="M12 2v3"></path></svg>
+                <span id="timer-total">00:00</span>
+            </div>
+            <div class="timer-chip subtle" title="Tempo dedicado à questão atual">
+                Nesta questão: <strong id="timer-atual">00:00</strong>
+            </div>
+            <span class="pill pill-neutral" id="contador-respondidas" style="font-family: var(--font-mono);">
+                0 / {{ questoes|length }} respondidas
+            </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;" id="controles-andamento">
+            <button type="button" class="btn btn-outline" id="btn-pausar" style="min-height: 40px; padding: 8px 14px; font-size: 14px;" onclick="toggleTimerPause()">
+                Pausar
+            </button>
+            <button type="button" class="btn btn-green" style="min-height: 40px; padding: 8px 18px; font-size: 14px;" onclick="finishMockExam()">
+                Finalizar e Corrigir
+            </button>
+        </div>
+    </div>
+
+    <section class="card" id="resumo-simulado" style="display: none; border: 2px solid var(--leaf); background: linear-gradient(135deg, #FFFFFF 0%, var(--leaf-soft) 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 18px;">
+            <div>
+                <span class="pill pill-leaf" style="margin-bottom: 8px;">Simulado Concluído</span>
+                <h2 style="font-family: var(--font-display); font-size: 24px; color: var(--ink);">Resultado e Revisão Completa</h2>
+                <p style="font-size: 14px; color: var(--ink-muted); margin-top: 2px;" id="msg-registro-bd">
+                    Resoluções registradas com o tempo real de cada questão.
+                </p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-primary" onclick="openSaveMockListModal()">
+                    Salvar como Lista / Caderno
+                </button>
+                <a href="{{ url_for('questionsPage') }}" class="btn btn-outline">Voltar ao Banco</a>
+            </div>
+        </div>
+
+        <div class="stats-grid" style="margin-bottom: 0;">
+            <div class="stat-card">
+                <div class="stat-label">Pontuação</div>
+                <div class="stat-value" id="res-acertos" style="color: var(--leaf);">0,00 / 0,00</div>
+                <div class="stat-foot" id="res-respondidas-sub">0 integrais - 0 parciais</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Aproveitamento</div>
+                <div class="stat-value" id="res-pct">0%</div>
+                <div class="stat-foot">Com pontuação parcial UFSC nas somatórias</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tempo Total</div>
+                <div class="stat-value" id="res-tempo-total">00:00</div>
+                <div class="stat-foot">Cronômetro ativo</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tempo Médio</div>
+                <div class="stat-value" id="res-tempo-medio">0s</div>
+                <div class="stat-foot">Por questão</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="q-nav-strip" id="q-nav-strip">
+        {% for q in questoes %}
+            <button type="button"
+                    class="q-nav-pill {% if loop.first %}current{% endif %}"
+                    id="nav-pill-{{ loop.index0 }}"
+                    onclick="goToMockQuestion({{ loop.index0 }})">
+                {{ '%02d'|format(loop.index) }}
+            </button>
+        {% endfor %}
+    </div>
+
+    <div class="simulado-paused-banner" id="paused-banner">
+        <h3 style="font-family: var(--font-display); font-size: 22px; color: var(--ink); margin-bottom: 8px;">
+            Simulado Pausado
+        </h3>
+        <p style="font-size: 15px; color: var(--ink-muted); margin-bottom: 20px;">
+            O cronômetro está parado. Quando estiver pronto para continuar, clique no botão abaixo.
+        </p>
+        <button type="button" class="btn btn-green" onclick="toggleTimerPause()">
+            Retomar Simulado
+        </button>
+    </div>
+
+    <div id="simulado-questoes-wrap">
+        {% for q in questoes %}
+            {% set q_idx = loop.index0 %}
+            <article class="card simulado-q-card"
+                     id="sim-card-{{ q_idx }}"
+                     data-idx="{{ q_idx }}"
+                     data-qid="{{ q.id_questao }}"
+                     data-tipo="{{ q.tipo }}"
+                     data-gabarito="{{ q.soma_correta }}"
+                     style="{% if not loop.first %}display: none;{% endif %}">
+                <div class="question-header">
+                    <div class="tags-row">
+                        <span class="pill pill-code">Questão {{ '%02d'|format(loop.index) }} de {{ '%02d'|format(questoes|length) }}</span>
+                        <span class="pill pill-neutral" style="font-family: var(--font-mono);">Q{{ '%03d'|format(q.id_questao) }}</span>
+                        <span class="pill pill-leaf">{{ q.instituicao }} {{ q.ano }}</span>
+                        <span class="pill pill-neutral">{{ 'Somatória' if q.tipo == 'Somatoria' else 'Múltipla Escolha' }}</span>
+                        {% for disc_nome, disc_frente, ass_nome in q.assuntos %}
+                            <span class="pill pill-primary">{{ disc_nome }} ({{ disc_frente }}) • {{ ass_nome }}</span>
+                        {% endfor %}
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="pill pill-neutral" id="tempo-review-{{ q_idx }}" style="display: none; font-family: var(--font-mono);">
+                            Tempo: 0s
+                        </span>
+                        <button type="button"
+                                class="btn-report-q"
+                                id="btn-rep-sim-{{ q.id_questao }}"
+                                title="Sinalizar erro na questão (matéria, gabarito, gramática ou formatação)"
+                                onclick="openMockReportModal({{ q.id_questao }})">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="question-enunciado">
+                    {{ q.enunciado|formatQuestionText|safe }}
+                </div>
+
+                {% if q.midias %}
+                    {% for legenda, arquivo in q.midias %}
+                        {% if arquivo.startswith('uploads/') %}
+                            <figure style="margin-bottom: 18px;">
+                                <img src="{{ url_for('static', filename=arquivo) }}" alt="{{ legenda }}" class="question-media-img">
+                                {% if legenda %}<figcaption style="font-size: 13px; color: var(--ink-subtle);">{{ legenda }}</figcaption>{% endif %}
+                            </figure>
+                        {% elif arquivo.startswith('http://') or arquivo.startswith('https://') %}
+                            <figure style="margin-bottom: 18px;">
+                                <img src="{{ arquivo }}" alt="{{ legenda }}" class="question-media-img">
+                                {% if legenda %}<figcaption style="font-size: 13px; color: var(--ink-subtle);">{{ legenda }}</figcaption>{% endif %}
+                            </figure>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+
+                <div class="options-list" id="sim-options-{{ q_idx }}" data-tipo="{{ q.tipo }}">
+                    {% for id_alt, val_prop, texto_alt, correta in q.alternativas %}
+                        {% set rotulo_alt = ('%02d'|format(val_prop)) if q.tipo == 'Somatoria' else (['A', 'B', 'C', 'D', 'E'][(loop.index0) % 5]) %}
+                        <div class="option-tile"
+                             data-valor="{{ val_prop }}"
+                             data-rotulo="{{ rotulo_alt }}"
+                             data-correta="{{ 'true' if correta else 'false' }}"
+                             onclick="selectMockOption(this, {{ q_idx }}, '{{ q.tipo }}')">
+                            <div class="option-badge">{{ rotulo_alt }}</div>
+                            <div style="flex: 1;">{{ texto_alt|stripOptionPrefix|formatQuestionText|safe }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="question-actions">
+                    <div class="soma-box">
+                        {% if q.tipo == 'Somatoria' %}
+                            Somatória marcada: <strong id="sim-soma-{{ q_idx }}">00</strong>
+                        {% else %}
+                            Alternativa marcada: <strong id="sim-soma-{{ q_idx }}">-</strong>
+                        {% endif %}
+                    </div>
+
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;" class="nav-botoes-questao">
+                        {% if not loop.first %}
+                            <button type="button" class="btn btn-outline" onclick="goToMockQuestion({{ q_idx - 1 }})">
+                                ← Anterior
+                            </button>
+                        {% endif %}
+                        {% if not loop.last %}
+                            <button type="button" class="btn btn-primary" onclick="goToMockQuestion({{ q_idx + 1 }})">
+                                Próxima →
+                            </button>
+                        {% else %}
+                            <button type="button" class="btn btn-green" onclick="finishMockExam()">
+                                Finalizar e Corrigir
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="feedback-strip" id="sim-feedback-{{ q_idx }}"></div>
+
+                <div class="support-drawer" id="sim-apoio-{{ q_idx }}">
+                    <strong style="font-family: var(--font-display); color: var(--leaf-deep);">Dicas e Resolução Passo a Passo</strong>
+                    {% if q.dicas %}
+                        {% for tipo_dica, texto_dica in q.dicas %}
+                            <div class="support-item">
+                                <span class="pill pill-leaf" style="margin-bottom: 8px;">{{ tipo_dica }}</span>
+                                <div style="font-size: 15px; color: var(--ink); line-height: 1.65;">{{ texto_dica|formatQuestionText|safe }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="margin-top: 10px; font-size: 14px; color: var(--ink-muted);">Nenhuma resolução cadastrada ainda para esta questão.</p>
+                    {% endif %}
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+
+    <div class="modal-backdrop" id="modal-reportar-sim" onclick="if (event.target === this) this.classList.remove('open');">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-family: var(--font-display); font-size: 20px;" id="rep-sim-titulo">Sinalizar Problema</h3>
+                    <p style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px;">O aviso será enviado à equipe docente e à Gestão.</p>
+                </div>
+                <button type="button" class="modal-close" onclick="document.getElementById('modal-reportar-sim').classList.remove('open')">×</button>
+            </div>
+            <form id="form-reportar-sim" onsubmit="submitMockReport(event)">
+                <input type="hidden" id="rep-sim-qid" value="">
+                <div class="radio-card-group" style="margin-bottom: 14px;">
+                    <label class="check-card"><input type="checkbox" name="motivos" value="materia"><div><strong>Matéria ou conteúdo incorreto</strong></div></label>
+                    <label class="check-card"><input type="checkbox" name="motivos" value="gabarito"><div><strong>Erro no gabarito</strong></div></label>
+                    <label class="check-card"><input type="checkbox" name="motivos" value="gramatica"><div><strong>Erro de gramática ou digitação</strong></div></label>
+                    <label class="check-card"><input type="checkbox" name="motivos" value="formatacao"><div><strong>Erro de formatação / equação / imagem</strong></div></label>
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label class="field-label">Detalhes (opcional)</label>
+                    <textarea id="rep-sim-detalhes" rows="2" placeholder="Descreva rapidamente o problema..."></textarea>
+                </div>
+                <div class="feedback-strip" id="rep-sim-fb" style="margin-top: 0; margin-bottom: 12px;"></div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-reportar-sim').classList.remove('open')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Enviar Sinalização</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-salvar-simulado" onclick="if (event.target === this) this.classList.remove('open');">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-family: var(--font-display); font-size: 20px;">Salvar Simulado como Lista</h3>
+                    <p style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px;">
+                        Guarde estas {{ questoes|length }} questões para revisar depois ou exportar em PDF.
+                    </p>
+                </div>
+                <button type="button" class="modal-close" onclick="document.getElementById('modal-salvar-simulado').classList.remove('open')">×</button>
+            </div>
+
+            <form action="{{ url_for('createListRoute') }}" method="POST">
+                <input type="hidden" name="origem" value="questoes">
+                <input type="hidden" name="questoes_ids_csv" value="{{ ids_csv }}">
+
+                <div style="margin-bottom: 16px;">
+                    <label class="field-label">Nome da lista / caderno</label>
+                    <input type="text" name="titulo" value="{{ titulo_simulado }}" required>
+                </div>
+
+                {% if usuario_logado.perfil in ['professor', 'gestao'] %}
+                    <div style="margin-bottom: 16px;">
+                        <label class="field-label">Visibilidade e Destino</label>
+                        <div class="radio-card-group">
+                            <label class="radio-card">
+                                <input type="radio" name="publica" value="true" checked>
+                                <div>
+                                    <strong>Adicionar como tarefa dos alunos</strong>
+                                    <span>Aparece no portal de todos os alunos das Turmas A e B.</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="publica" value="false">
+                                <div>
+                                    <strong>Manter privada (apenas para mim)</strong>
+                                    <span>Visível somente na sua conta docente/gestão.</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                {% else %}
+                    <input type="hidden" name="publica" value="false">
+                    <div style="padding: 10px 14px; background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; font-size: 13px; color: var(--ink-muted); margin-bottom: 16px;">
+                        Salvo como <strong>Caderno Pessoal (privado)</strong> na sua conta.
+                    </div>
+                {% endif %}
+
+                <div style="margin-bottom: 20px;">
+                    <label class="field-label">Após salvar, o que deseja fazer?</label>
+                    <select name="acao_pos">
+                        <option value="salvar" selected>Apenas salvar no sistema</option>
+                        <option value="pdf">Salvar e gerar PDF</option>
+                        <option value="pdf_gabarito">Salvar e gerar PDF + Gabarito oficial</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-salvar-simulado').classList.remove('open')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Confirmar e Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const totalQuestoes = {{ questoes|length }};
+    let idxAtual = 0;
+    let tempoTotal = 0;
+    const temposPorQuestao = Array(totalQuestoes).fill(0);
+    let pausado = false;
+    let simuladoFinalizado = false;
+
+    function formatDuration(seg) {
+        const m = String(Math.floor(seg / 60)).padStart(2, '0');
+        const s = String(seg % 60).padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    const intervalo = setInterval(() => {
+        if (pausado || simuladoFinalizado) return;
+        tempoTotal += 1;
+        temposPorQuestao[idxAtual] += 1;
+        document.getElementById('timer-total').textContent = formatDuration(tempoTotal);
+        document.getElementById('timer-atual').textContent = formatDuration(temposPorQuestao[idxAtual]);
+    }, 1000);
+
+    function goToMockQuestion(novoIdx) {
+        if (novoIdx < 0 || novoIdx >= totalQuestoes) return;
+        if (simuladoFinalizado) {
+            const card = document.getElementById(`sim-card-${novoIdx}`);
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
+        document.getElementById(`sim-card-${idxAtual}`).style.display = 'none';
+        document.getElementById(`nav-pill-${idxAtual}`).classList.remove('current');
+
+        idxAtual = novoIdx;
+        document.getElementById(`sim-card-${idxAtual}`).style.display = 'block';
+        document.getElementById(`nav-pill-${idxAtual}`).classList.add('current');
+        document.getElementById('timer-atual').textContent = formatDuration(temposPorQuestao[idxAtual]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toggleTimerPause() {
+        if (simuladoFinalizado) return;
+        pausado = !pausado;
+        document.getElementById('paused-banner').classList.toggle('show', pausado);
+        document.getElementById('simulado-questoes-wrap').style.display = pausado ? 'none' : 'block';
+        document.getElementById('btn-pausar').textContent = pausado ? 'Retomar' : 'Pausar';
+    }
+
+    function selectMockOption(tile, idx, tipo) {
+        if (simuladoFinalizado || pausado) return;
+        const lista = document.getElementById(`sim-options-${idx}`);
+
+        if (tipo === 'Multipla Escolha') {
+            const jaSelecionada = tile.classList.contains('selected');
+            lista.querySelectorAll('.option-tile').forEach(el => el.classList.remove('selected'));
+            if (!jaSelecionada) {
+                tile.classList.add('selected');
+            }
+        } else {
+            tile.classList.toggle('selected');
+        }
+
+        let soma = 0;
+        const selecionadas = lista.querySelectorAll('.option-tile.selected');
+        selecionadas.forEach(el => {
+            soma += parseInt(el.getAttribute('data-valor'), 10);
+        });
+
+        const label = tipo === 'Multipla Escolha'
+            ? (selecionadas.length ? selecionadas[0].getAttribute('data-rotulo') : '-')
+            : String(soma).padStart(2, '0');
+        document.getElementById(`sim-soma-${idx}`).textContent = label;
+
+        const pill = document.getElementById(`nav-pill-${idx}`);
+        pill.classList.toggle('answered', selecionadas.length > 0);
+        updateAnsweredCounter();
+    }
+
+    function updateAnsweredCounter() {
+        let resp = 0;
+        for (let i = 0; i < totalQuestoes; i++) {
+            const sels = document.querySelectorAll(`#sim-options-${i} .option-tile.selected`);
+            if (sels.length > 0) resp += 1;
+        }
+        document.getElementById('contador-respondidas').textContent = `${resp} / ${totalQuestoes} respondidas`;
+        return resp;
+    }
+
+    function formatBrazilianScore(valor) {
+        return Number(valor).toFixed(2).replace('.', ',');
+    }
+
+    function calculateUfscScore(np, ntpc, npc, npi) {
+        if (np <= 0 || npc <= npi) return 0.0;
+        const bruto = (np - (ntpc - (npc - npi))) / np;
+        const limitado = Math.max(0, Math.min(1, bruto));
+        return Math.round(limitado * 100) / 100;
+    }
+
+    async function finishMockExam() {
+        if (simuladoFinalizado) return;
+
+        const respondidas = updateAnsweredCounter();
+        if (respondidas < totalQuestoes) {
+            const faltam = totalQuestoes - respondidas;
+            const ok = confirm(`Você ainda não respondeu ${faltam} questão(ões). Deseja finalizar e corrigir o simulado agora mesmo assim?`);
+            if (!ok) return;
+        }
+
+        simuladoFinalizado = true;
+        pausado = false;
+        clearInterval(intervalo);
+        document.getElementById('paused-banner').classList.remove('show');
+        document.getElementById('simulado-questoes-wrap').style.display = 'block';
+        document.getElementById('controles-andamento').style.display = 'none';
+
+        let pontuacaoTotal = 0;
+        let acertosIntegrais = 0;
+        let acertosParciais = 0;
+        const payloadRespostas = [];
+
+        document.querySelectorAll('.simulado-q-card').forEach((card, idx) => {
+            card.style.display = 'block';
+            card.querySelectorAll('.nav-botoes-questao').forEach(b => b.style.display = 'none');
+
+            const idQ = Number(card.getAttribute('data-qid'));
+            const tipo = card.getAttribute('data-tipo');
+            const gabarito = Number(card.getAttribute('data-gabarito'));
+            const lista = document.getElementById(`sim-options-${idx}`);
+            const todasOpcoes = lista.querySelectorAll('.option-tile');
+            const selecionadas = lista.querySelectorAll('.option-tile.selected');
+            const fb = document.getElementById(`sim-feedback-${idx}`);
+            const pill = document.getElementById(`nav-pill-${idx}`);
+            const tempoQ = Math.max(1, temposPorQuestao[idx]);
+
+            const badgeTempo = document.getElementById(`tempo-review-${idx}`);
+            badgeTempo.textContent = `Tempo: ${formatDuration(tempoQ)}`;
+            badgeTempo.style.display = 'inline-flex';
+
+            let soma = 0;
+            let rotuloCorreto = String(gabarito).padStart(2, '0');
+            let acertouIntegral = false;
+            let notaQuestao = 0.0;
+
+            if (tipo === 'Multipla Escolha') {
+                if (selecionadas.length > 0) {
+                    soma = parseInt(selecionadas[0].getAttribute('data-valor'), 10);
+                    acertouIntegral = selecionadas[0].getAttribute('data-correta') === 'true';
+                    notaQuestao = acertouIntegral ? 1.0 : 0.0;
+                }
+                todasOpcoes.forEach(el => {
+                    const isCorreta = el.getAttribute('data-correta') === 'true';
+                    if (isCorreta) {
+                        rotuloCorreto = el.getAttribute('data-rotulo');
+                        el.classList.add('correct-state');
+                    } else if (el.classList.contains('selected')) {
+                        el.classList.add('wrong-state');
+                    }
+                });
+
+                pill.classList.remove('current', 'answered');
+                pill.classList.add(acertouIntegral ? 'res-ok' : 'res-err');
+
+                fb.className = 'feedback-strip show ' + (acertouIntegral ? 'ok' : 'err');
+                if (selecionadas.length === 0) {
+                    fb.textContent = `Questão em branco (0,00 pt). Alternativa correta: ${rotuloCorreto}.`;
+                } else if (acertouIntegral) {
+                    fb.textContent = `Correta (1,00 pt)! Alternativa ${rotuloCorreto} — respondida em ${formatDuration(tempoQ)}.`;
+                } else {
+                    fb.textContent = `Incorreta (0,00 pt). Alternativa correta: ${rotuloCorreto} (tempo gasto: ${formatDuration(tempoQ)}).`;
+                }
+            } else {
+                const np = todasOpcoes.length;
+                let ntpc = 0;
+                let npc = 0;
+                let npi = 0;
+
+                todasOpcoes.forEach(el => {
+                    const marcada = el.classList.contains('selected');
+                    const isCorreta = el.getAttribute('data-correta') === 'true';
+                    if (isCorreta) ntpc += 1;
+                    if (marcada) {
+                        soma += parseInt(el.getAttribute('data-valor'), 10);
+                        if (isCorreta) {
+                            npc += 1;
+                            el.classList.add('correct-state');
+                        } else {
+                            npi += 1;
+                            el.classList.add('wrong-state');
+                        }
+                    } else if (isCorreta) {
+                        el.classList.add('correct-state');
+                    }
+                });
+
+                notaQuestao = calculateUfscScore(np, ntpc, npc, npi);
+                acertouIntegral = (selecionadas.length > 0 && soma === gabarito);
+
+                pill.classList.remove('current', 'answered');
+                if (acertouIntegral || notaQuestao >= 1.0) {
+                    pill.classList.add('res-ok');
+                    fb.className = 'feedback-strip show ok';
+                    fb.textContent = `Acerto integral (1,00 pt UFSC)! Somatória exata: ${rotuloCorreto} — respondida em ${formatDuration(tempoQ)}.`;
+                } else if (notaQuestao > 0) {
+                    pill.classList.add('res-partial');
+                    fb.className = 'feedback-strip show partial';
+                    fb.textContent = `Pontuação parcial UFSC: ${formatBrazilianScore(notaQuestao)} / 1,00 pt (NP=${np}, NTPC=${ntpc}, NPC=${npc}, NPI=${npi}). Você marcou ${String(soma).padStart(2, '0')} e o gabarito oficial é ${rotuloCorreto} — tempo: ${formatDuration(tempoQ)}.`;
+                } else {
+                    pill.classList.add('res-err');
+                    fb.className = 'feedback-strip show err';
+                    if (selecionadas.length === 0) {
+                        fb.textContent = `Questão em branco (0,00 pt UFSC). Somatória oficial: ${rotuloCorreto}.`;
+                    } else {
+                        fb.textContent = `Pontuação UFSC: 0,00 / 1,00 pt (NPC ≤ NPI: ${npc} correta(s) e ${npi} incorreta(s) marcada(s)). Você marcou ${String(soma).padStart(2, '0')} e o gabarito oficial é ${rotuloCorreto} — tempo: ${formatDuration(tempoQ)}.`;
+                    }
+                }
+            }
+
+            pontuacaoTotal = Math.round((pontuacaoTotal + notaQuestao) * 100) / 100;
+            if (acertouIntegral) {
+                acertosIntegrais += 1;
+            } else if (notaQuestao > 0) {
+                acertosParciais += 1;
+            }
+
+            const apoio = document.getElementById(`sim-apoio-${idx}`);
+            if (apoio && apoio.querySelector('.support-item')) {
+                apoio.classList.add('open');
+            }
+
+            if (selecionadas.length > 0) {
+                payloadRespostas.push({
+                    id_questao: idQ,
+                    resposta_aluno: soma,
+                    acerto: acertouIntegral,
+                    tempo_gasto: tempoQ
+                });
+            }
+        });
+
+        const pct = totalQuestoes > 0 ? ((pontuacaoTotal / totalQuestoes) * 100).toFixed(1).replace('.', ',') : '0,0';
+        const mediaSeg = totalQuestoes > 0 ? Math.round(tempoTotal / totalQuestoes) : 0;
+
+        document.getElementById('res-acertos').textContent = `${formatBrazilianScore(pontuacaoTotal)} / ${formatBrazilianScore(totalQuestoes)}`;
+        document.getElementById('res-respondidas-sub').textContent =
+            `${acertosIntegrais} integral(is) • ${acertosParciais} parcial(is) UFSC • ${payloadRespostas.length} respondida(s)`;
+        document.getElementById('res-pct').textContent = `${pct}%`;
+        document.getElementById('res-tempo-total').textContent = formatDuration(tempoTotal);
+        document.getElementById('res-tempo-medio').textContent = `${mediaSeg}s`;
+        document.getElementById('resumo-simulado').style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        if (payloadRespostas.length > 0) {
+            try {
+                const resp = await fetch('/api/simulado/finalizar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ respostas: payloadRespostas })
+                });
+                const data = await resp.json();
+                if (data.ok && data.registradas > 0) {
+                    document.getElementById('msg-registro-bd').textContent =
+                        `${data.registradas} resolução(ões) salva(s) no seu histórico com o tempo real cronometrado.`;
+                } else if (data.ok) {
+                    document.getElementById('msg-registro-bd').textContent =
+                        'Modo visualização (perfil docente/gestão): correção exibida sem alterar o histórico de alunos.';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }
+
+    function openSaveMockListModal() {
+        document.getElementById('modal-salvar-simulado').classList.add('open');
+    }
+
+    function openMockReportModal(idQ) {
+        document.getElementById('rep-sim-qid').value = idQ;
+        document.getElementById('rep-sim-titulo').textContent = `Sinalizar Problema — Q${String(idQ).padStart(3, '0')}`;
+        document.querySelectorAll('#form-reportar-sim input[type="checkbox"]').forEach(c => { c.checked = false; });
+        document.getElementById('rep-sim-detalhes').value = '';
+        const fb = document.getElementById('rep-sim-fb');
+        fb.className = 'feedback-strip';
+        fb.textContent = '';
+        document.getElementById('modal-reportar-sim').classList.add('open');
+    }
+
+    async function submitMockReport(ev) {
+        ev.preventDefault();
+        const idQ = document.getElementById('rep-sim-qid').value;
+        const motivos = Array.from(document.querySelectorAll('#form-reportar-sim input[name="motivos"]:checked')).map(c => c.value);
+        const detalhes = document.getElementById('rep-sim-detalhes').value.trim();
+        const fb = document.getElementById('rep-sim-fb');
+        if (motivos.length === 0) {
+            fb.className = 'feedback-strip show err';
+            fb.textContent = 'Selecione ao menos um tipo de problema.';
+            return;
+        }
+        try {
+            const resp = await fetch(`/api/questoes/${idQ}/reportar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ motivos, detalhes })
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                fb.className = 'feedback-strip show ok';
+                fb.textContent = 'Sinalização registrada com sucesso!';
+                const btn = document.getElementById(`btn-rep-sim-${idQ}`);
+                if (btn) btn.classList.add('reported');
+                setTimeout(() => document.getElementById('modal-reportar-sim').classList.remove('open'), 850);
+            }
+        } catch (e) {}
+    }
+</script>
+{% endblock %}

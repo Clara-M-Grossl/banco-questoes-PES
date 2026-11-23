@@ -1,0 +1,458 @@
+{% extends 'base.html' %}
+
+{% block title %}Administração — Cursinho PES{% endblock %}
+{% block page_title %}Administração do Sistema{% endblock %}
+{% block page_subtitle %}Cadastro de colaboradores e estudantes, gestão das tabelas e manutenção da base de dados{% endblock %}
+
+{% block content %}
+    <div class="tabs-inline">
+        <button type="button" class="btn {{ 'btn-primary' if aba_ativa == 'usuarios' else 'btn-outline' }}" id="admin-tab-usuarios" onclick="switchAdminTab('usuarios')">
+            Cadastrar Colaborador / Estudante
+        </button>
+        <button type="button" class="btn {{ 'btn-primary' if aba_ativa == 'banco' else 'btn-outline' }}" id="admin-tab-banco" onclick="switchAdminTab('banco')">
+            Administrar Banco de Dados
+        </button>
+    </div>
+
+    <section class="card" id="admin-panel-usuarios" style="{% if aba_ativa != 'usuarios' %}display: none;{% endif %}">
+        <div style="margin-bottom: 18px;">
+            <h2 style="font-family: var(--font-display); font-size: 20px; margin-bottom: 4px;">Cadastrar Novo Colaborador ou Estudante</h2>
+        </div>
+
+        <form action="{{ url_for('registerFullUserRoute') }}" method="POST">
+            <div class="form-grid-2" style="margin-bottom: 14px;">
+                <div>
+                    <label class="field-label">Nome completo</label>
+                    <input type="text" name="nome" placeholder="Nome e sobrenome" required>
+                </div>
+                <div>
+                    <label class="field-label">CPF (apenas números)</label>
+                    <input type="text" name="cpf" maxlength="11" placeholder="11 dígitos" required>
+                </div>
+            </div>
+
+            <div class="form-grid-2" style="margin-bottom: 14px;">
+                <div>
+                    <label class="field-label">E-mail</label>
+                    <input type="email" name="email" placeholder="email@pes.ufsc.br" required>
+                </div>
+                <div>
+                    <label class="field-label">Senha inicial</label>
+                    <input type="password" name="senha" placeholder="Defina uma senha" required>
+                </div>
+            </div>
+
+            <div class="form-grid-2" style="margin-bottom: 16px;">
+                <div>
+                    <label class="field-label">Perfil no Cursinho PES</label>
+                    <select name="perfil" id="perfil-novo-usuario" onchange="updateRoleFields()" required>
+                        <option value="aluno">Aluno</option>
+                        <option value="professor">Professor</option>
+                        <option value="gestao">Gestão</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Data de ingresso no PES</label>
+                    <input type="date" name="data_ingresso" value="2026-03-09">
+                </div>
+            </div>
+
+            <div id="campos-aluno" class="form-grid-2 admin-role-box">
+                <div>
+                    <label class="field-label">Turma PES</label>
+                    <select name="turma">
+                        <option value="A">Turma A</option>
+                        <option value="B">Turma B</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Situação no Ensino Médio</label>
+                    <select name="situacao_em">
+                        <option value="3º Ano EM">3º Ano EM</option>
+                        <option value="Concluído">Concluído</option>
+                        <option value="2º Ano EM">2º Ano EM</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Curso desejado no vestibular</label>
+                    <input type="text" name="curso_desejado" placeholder="Ex: Medicina, Engenharia, Direito">
+                </div>
+                <div>
+                    <label class="field-label">Escola de origem</label>
+                    <select name="id_escola" id="sel-escola-novo" onchange="toggleNewSchoolFields()">
+                        {% for id_e, nome_e, cid_e in escolas_lista %}
+                            <option value="{{ id_e }}">{{ nome_e }} ({{ cid_e }})</option>
+                        {% endfor %}
+                        <option value="nova">+ Cadastrar nova escola...</option>
+                    </select>
+                </div>
+                <div id="box-nova-escola" style="display: none; grid-column: 1 / -1;" class="form-grid-2">
+                    <div>
+                        <label class="field-label">Nome da nova escola</label>
+                        <input type="text" name="nova_escola_nome" placeholder="Ex: EEB Castro Alves">
+                    </div>
+                    <div>
+                        <label class="field-label">Cidade</label>
+                        <input type="text" name="nova_escola_cidade" placeholder="Ex: Araranguá">
+                    </div>
+                </div>
+            </div>
+
+            <div id="campos-professor" class="form-grid-2 admin-role-box" style="display: none;">
+                <div>
+                    <label class="field-label">Disciplina e Frente (1 professor por frente)</label>
+                    <select name="id_disciplina">
+                        {% for id_d, nome_d, frente_d in disciplinas_lista %}
+                            {% if id_d in disciplinas_ocupadas %}
+                                <option value="{{ id_d }}" disabled>{{ nome_d }} — Frente {{ frente_d }} (Ocupada: {{ disciplinas_ocupadas[id_d] }})</option>
+                            {% else %}
+                                <option value="{{ id_d }}">{{ nome_d }} — Frente {{ frente_d }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Curso de Graduação</label>
+                    <select name="id_curso" id="sel-curso-novo" onchange="toggleNewCourseFields()">
+                        {% for id_c, nome_c in cursos_lista %}
+                            <option value="{{ id_c }}">{{ nome_c }}</option>
+                        {% endfor %}
+                        <option value="novo">+ Cadastrar novo curso...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Matrícula UFSC</label>
+                    <input type="text" name="matricula_ufsc" placeholder="Ex: 24201395">
+                </div>
+                <div>
+                    <label class="field-label">Fase do curso</label>
+                    <input type="number" name="fase_curso" min="1" max="12" value="5">
+                </div>
+                <div id="box-novo-curso" style="display: none; grid-column: 1 / -1;">
+                    <label class="field-label">Nome do novo curso</label>
+                    <input type="text" name="novo_curso_nome" placeholder="Ex: Engenharia de Computação - UFSC">
+                </div>
+            </div>
+
+            <div id="campos-gestao" class="form-grid-2 admin-role-box" style="display: none;">
+                <div>
+                    <label class="field-label">Cargo</label>
+                    <select name="cargo">
+                        <option value="Gestor">Gestor</option>
+                        <option value="Diretor">Diretor</option>
+                        <option value="Vice-Presidente">Vice-Presidente</option>
+                        <option value="Presidente">Presidente</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Setor de Atuação</label>
+                    <select name="setor_atuacao">
+                        <option value="T.I">T.I</option>
+                        <option value="Ensino">Ensino</option>
+                        <option value="Pedagógico">Pedagógico</option>
+                        <option value="Gestão de Pessoas">Gestão de Pessoas</option>
+                        <option value="Marketing">Marketing</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-leaf" style="min-height: 46px;">Cadastrar Usuário</button>
+        </form>
+    </section>
+
+    <div id="admin-panel-banco" style="{% if aba_ativa != 'banco' %}display: none;{% endif %}">
+        <section class="card">
+            <div class="admin-db-toolbar">
+                <div>
+                    <h2 style="font-family: var(--font-display); font-size: 20px; margin-bottom: 2px;">Tabela {{ crud_dados.tabela_label }}</h2>
+                    <p style="font-size: 13px; color: var(--ink-subtle);">
+                        {{ crud_dados.total_registros }} registro(s) encontrado(s) • exibindo 10 por página
+                    </p>
+                </div>
+
+                <div class="admin-db-controls">
+                    <form action="{{ url_for('adminPage') }}" method="GET" class="admin-filter-form">
+                        <input type="hidden" name="aba" value="banco">
+                        <select name="tabela" onchange="this.form.submit()" aria-label="Selecionar tabela" style="min-width: 200px; font-weight: 700;">
+                            {% for t in tabelas_nomes %}
+                                <option value="{{ t }}" {% if t == crud_dados.tabela %}selected{% endif %}>{{ table_labels[t] }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="busca" value="{{ crud_dados.busca }}" placeholder="Filtrar registros..." style="min-width: 180px;">
+                        <button type="submit" class="btn btn-outline" style="min-height: 44px; padding: 0 14px;">Buscar</button>
+                        {% if crud_dados.busca %}
+                            <a href="{{ url_for('adminPage', aba='banco', tabela=crud_dados.tabela) }}" class="btn btn-outline" style="min-height: 44px; padding: 0 12px;">Limpar</a>
+                        {% endif %}
+                    </form>
+
+                    <button type="button" class="btn btn-primary" style="min-height: 44px; white-space: nowrap;" onclick="openInsertRecordModal()">
+                        + Novo Registro
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-wrap" style="margin-top: 16px; margin-bottom: 18px;">
+                <table>
+                    <thead>
+                        <tr>
+                            {% for col in crud_dados.colunas %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                            <th style="text-align: right; width: 120px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if crud_dados.linhas %}
+                            {% for linha in crud_dados.linhas %}
+                                {% set row_idx = loop.index0 %}
+                                <tr>
+                                    {% for cel in linha %}
+                                        {% set cel_str = '' if cel is none else (cel|string) %}
+                                        <td title="{{ cel_str }}">
+                                            {% if cel_str|length > 72 %}
+                                                {{ cel_str[:72] }}…
+                                            {% else %}
+                                                {{ cel_str if cel_str != '' else '—' }}
+                                            {% endif %}
+                                        </td>
+                                    {% endfor %}
+                                    <td style="text-align: right; white-space: nowrap;">
+                                        <button type="button" class="btn-icon-action" title="Editar registro" onclick="openEditRecordModal({{ row_idx }})">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                        </button>
+                                        <button type="button" class="btn-icon-action danger" title="Excluir registro" onclick="openDeleteRecordModal({{ row_idx }})">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="{{ crud_dados.colunas|length + 1 }}" style="text-align: center; padding: 28px; color: var(--ink-subtle);">
+                                    Nenhum registro encontrado nesta tabela.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if crud_dados.total_paginas > 1 %}
+                <div class="admin-pagination">
+                    {% if crud_dados.pagina > 1 %}
+                        <a href="{{ url_for('adminPage', aba='banco', tabela=crud_dados.tabela, pagina=crud_dados.pagina-1, busca=crud_dados.busca) }}" class="btn btn-outline" style="min-height: 38px; padding: 6px 14px;">← Anterior</a>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
+
+                    <span style="font-weight: 700; color: var(--ink-muted); font-size: 14px;">
+                        Página {{ crud_dados.pagina }} de {{ crud_dados.total_paginas }} ({{ crud_dados.total_registros }} registros)
+                    </span>
+
+                    {% if crud_dados.pagina < crud_dados.total_paginas %}
+                        <a href="{{ url_for('adminPage', aba='banco', tabela=crud_dados.tabela, pagina=crud_dados.pagina+1, busca=crud_dados.busca) }}" class="btn btn-primary" style="min-height: 38px; padding: 6px 14px;">Próxima →</a>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        <!-- Manutencao da Base de Dados -->
+        <section class="card">
+            <h2 style="font-family: var(--font-display); font-size: 19px; margin-bottom: 4px;">Manutenção da Base de Dados</h2>
+            <p style="font-size: 14px; color: var(--ink-subtle); margin-bottom: 18px;">
+                Ações diretas sobre o script <code>database/ddl.sql</code> no PostgreSQL.
+            </p>
+            <div class="admin-maint-bar">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <form action="{{ url_for('adminDatabaseRoute', acao='reset') }}" method="POST" onsubmit="return confirm('Criar/reinicializar toda a base de dados? Isso recria as 19 tabelas e carrega os dados iniciais do ddl.sql.');">
+                        <button type="submit" class="btn btn-primary">Criar e Carregar Base (Reinicializar)</button>
+                    </form>
+                    <form action="{{ url_for('adminDatabaseRoute', acao='carregar') }}" method="POST" onsubmit="return confirm('Carregar os registros iniciais do ddl.sql?');">
+                        <button type="submit" class="btn btn-leaf">Carregar Dados Iniciais</button>
+                    </form>
+                </div>
+
+                <form action="{{ url_for('adminDatabaseRoute', acao='eliminar') }}" method="POST" onsubmit="return confirm('ATENÇÃO: Deseja realmente REMOVER todas as 19 tabelas do banco de dados?');">
+                    <button type="submit" class="btn btn-danger">Remover Tabelas</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="modal-backdrop" id="modal-admin-insert" onclick="if (event.target === this) closeAdminModals();">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-family: var(--font-display); font-size: 20px;">Novo Registro em {{ crud_dados.tabela_label }}</h3>
+                    <p style="font-size: 13px; color: var(--ink-subtle);">{% if crud_dados.auto_pk %}A chave primária é gerada automaticamente.{% else %}Preencha os campos do novo registro.{% endif %}</p>
+                </div>
+                <button type="button" class="modal-close" onclick="closeAdminModals()">×</button>
+            </div>
+            <form action="{{ url_for('adminCrudRoute', tabela=crud_dados.tabela, acao='inserir') }}" method="POST">
+                <input type="hidden" name="pagina_ret" value="{{ crud_dados.pagina }}">
+                <input type="hidden" name="busca_ret" value="{{ crud_dados.busca }}">
+                <div class="form-grid-2" style="gap: 12px; margin-bottom: 20px;">
+                    {% for col in crud_dados.colunas_insert %}
+                        <div {% if col in ['enunciado', 'texto', 'conteudo_texto'] %}style="grid-column: 1 / -1;"{% endif %}>
+                            <label class="field-label">{{ col }}</label>
+                            {% if col in ['enunciado', 'texto', 'conteudo_texto'] %}
+                                <textarea name="{{ col }}" rows="3" placeholder="{{ col }}"></textarea>
+                            {% else %}
+                                <input type="text" name="{{ col }}" placeholder="{{ col }}">
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="closeAdminModals()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Registro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-admin-edit" onclick="if (event.target === this) closeAdminModals();">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-family: var(--font-display); font-size: 20px;">Editar Registro — {{ crud_dados.tabela_label }}</h3>
+                    <p style="font-size: 13px; color: var(--ink-subtle);" id="edit-modal-subtitle">Altere os campos desejados e salve.</p>
+                </div>
+                <button type="button" class="modal-close" onclick="closeAdminModals()">×</button>
+            </div>
+            <form action="{{ url_for('adminCrudRoute', tabela=crud_dados.tabela, acao='atualizar') }}" method="POST" id="form-admin-edit">
+                <input type="hidden" name="modo_lote" value="1">
+                <input type="hidden" name="pagina_ret" value="{{ crud_dados.pagina }}">
+                <input type="hidden" name="busca_ret" value="{{ crud_dados.busca }}">
+                <input type="hidden" name="pk_val" id="edit-pk-val">
+                <input type="hidden" name="pk1_orig" id="edit-pk1-orig">
+                <input type="hidden" name="pk2_orig" id="edit-pk2-orig">
+
+                <div class="form-grid-2" style="gap: 12px; margin-bottom: 20px;" id="edit-fields-container">
+                    {% for col in crud_dados.colunas %}
+                        {% set is_pk_locked = (loop.first and not crud_dados.pk_composta) %}
+                        <div {% if col in ['enunciado', 'texto', 'conteudo_texto'] %}style="grid-column: 1 / -1;"{% endif %}>
+                            <label class="field-label">{{ col }}{% if is_pk_locked %} (PK){% endif %}</label>
+                            {% if col in ['enunciado', 'texto', 'conteudo_texto'] %}
+                                <textarea name="{{ col }}" id="edit-col-{{ loop.index0 }}" rows="3"></textarea>
+                            {% else %}
+                                <input type="text" name="{{ col }}" id="edit-col-{{ loop.index0 }}" {% if is_pk_locked %}readonly style="background: var(--surface-sunken); color: var(--ink-subtle);"{% endif %}>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="closeAdminModals()">Cancelar</button>
+                    <button type="submit" class="btn btn-leaf">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-admin-delete" onclick="if (event.target === this) closeAdminModals();">
+        <div class="modal-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-display); font-size: 19px; color: var(--coral-deep);">Confirmar Exclusão</h3>
+                <button type="button" class="modal-close" onclick="closeAdminModals()">×</button>
+            </div>
+            <p style="font-size: 14px; color: var(--ink-muted); margin-bottom: 18px;" id="delete-modal-desc">
+                Deseja realmente excluir este registro?
+            </p>
+            <form action="{{ url_for('adminCrudRoute', tabela=crud_dados.tabela, acao='excluir') }}" method="POST">
+                <input type="hidden" name="pagina_ret" value="{{ crud_dados.pagina }}">
+                <input type="hidden" name="busca_ret" value="{{ crud_dados.busca }}">
+                <input type="hidden" name="pk1" id="delete-pk1">
+                <input type="hidden" name="pk2" id="delete-pk2">
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="closeAdminModals()">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Excluir Registro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ADMIN_ROWS = [
+        {% for linha in crud_dados.linhas %}
+            [{% for cel in linha %}{{ ('' if cel is none else (cel|string))|tojson }}{% if not loop.last %}, {% endif %}{% endfor %}]{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    const ADMIN_COLS = {{ crud_dados.colunas|tojson }};
+    const ADMIN_IS_COMPOSITE = {{ 'true' if crud_dados.pk_composta else 'false' }};
+
+    function switchAdminTab(tab) {
+        document.getElementById('admin-panel-usuarios').style.display = (tab === 'usuarios') ? 'block' : 'none';
+        document.getElementById('admin-panel-banco').style.display = (tab === 'banco') ? 'block' : 'none';
+        const btnU = document.getElementById('admin-tab-usuarios');
+        const btnB = document.getElementById('admin-tab-banco');
+        btnU.className = 'btn ' + (tab === 'usuarios' ? 'btn-primary' : 'btn-outline');
+        btnB.className = 'btn ' + (tab === 'banco' ? 'btn-primary' : 'btn-outline');
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('aba', tab);
+            window.history.replaceState({}, '', url.toString());
+        } catch (e) {}
+    }
+
+    function updateRoleFields() {
+        const perfil = document.getElementById('perfil-novo-usuario').value;
+        document.getElementById('campos-aluno').style.display = perfil === 'aluno' ? 'grid' : 'none';
+        document.getElementById('campos-professor').style.display = perfil === 'professor' ? 'grid' : 'none';
+        document.getElementById('campos-gestao').style.display = perfil === 'gestao' ? 'grid' : 'none';
+    }
+
+    function toggleNewSchoolFields() {
+        const sel = document.getElementById('sel-escola-novo');
+        document.getElementById('box-nova-escola').style.display = (sel && sel.value === 'nova') ? 'grid' : 'none';
+    }
+
+    function toggleNewCourseFields() {
+        const sel = document.getElementById('sel-curso-novo');
+        document.getElementById('box-novo-curso').style.display = (sel && sel.value === 'novo') ? 'block' : 'none';
+    }
+
+    function openInsertRecordModal() {
+        document.getElementById('modal-admin-insert').classList.add('open');
+    }
+
+    function openEditRecordModal(rowIdx) {
+        const row = ADMIN_ROWS[rowIdx];
+        if (!row) return;
+        document.getElementById('edit-pk-val').value = row[0];
+        document.getElementById('edit-pk1-orig').value = row[0];
+        document.getElementById('edit-pk2-orig').value = row[1] || '';
+        document.getElementById('edit-modal-subtitle').textContent = ADMIN_IS_COMPOSITE
+            ? `Chave composta: ${ADMIN_COLS[0]}=${row[0]}, ${ADMIN_COLS[1]}=${row[1]}`
+            : `Editando registro ${ADMIN_COLS[0]} = ${row[0]}`;
+        row.forEach((val, idx) => {
+            const el = document.getElementById('edit-col-' + idx);
+            if (el) el.value = val;
+        });
+        document.getElementById('modal-admin-edit').classList.add('open');
+    }
+
+    function openDeleteRecordModal(rowIdx) {
+        const row = ADMIN_ROWS[rowIdx];
+        if (!row) return;
+        document.getElementById('delete-pk1').value = row[0];
+        document.getElementById('delete-pk2').value = row[1] || '';
+        document.getElementById('delete-modal-desc').textContent = ADMIN_IS_COMPOSITE
+            ? `Excluir o vínculo (${ADMIN_COLS[0]} = ${row[0]}, ${ADMIN_COLS[1]} = ${row[1]}) da tabela {{ crud_dados.tabela_label }}?`
+            : `Excluir o registro ${ADMIN_COLS[0]} = ${row[0]} da tabela {{ crud_dados.tabela_label }}? Esta ação não pode ser desfeita.`;
+        document.getElementById('modal-admin-delete').classList.add('open');
+    }
+
+    function closeAdminModals() {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('open'));
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeAdminModals();
+    });
+</script>
+{% endblock %}

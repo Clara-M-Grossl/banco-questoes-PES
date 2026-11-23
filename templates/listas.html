@@ -1,0 +1,646 @@
+{% extends 'base.html' %} {% block title %}Listas e Cadernos — Cursinho PES{%
+endblock %} {% block page_title %}Listas de Exercícios e Cadernos{% endblock %}
+{% block content %}
+<!-- Filtros das Listas -->
+<section class="card" style="padding: 16px 20px; margin-bottom: 18px">
+  <div
+    style="
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    "
+  >
+    <strong
+      style="
+        font-family: var(--font-display);
+        font-size: 16px;
+        color: var(--ink);
+      "
+      >Filtrar Listas e Cadernos</strong
+    >
+  </div>
+  <div
+    class="lists-filter-bar"
+    style="
+      margin-top: 0;
+      background: var(--surface);
+      border: 1px solid var(--outline);
+    "
+  >
+    <div>
+      <label class="field-label">Matéria / Categoria</label>
+      <select id="filtro-pag-lista-cat" onchange="filterExistingLists()">
+        <option value="">Todas (Gerais e Matérias)</option>
+        <option value="geral">Geral</option>
+        <option value="meu caderno">Meu Caderno</option>
+        {% for d in disciplinas_unicas %}
+        <option value="{{ d|lower }}">{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="field-label">Criada por</label>
+      <select id="filtro-pag-lista-perfil" onchange="filterExistingLists()">
+        <option value="">Todos os criadores</option>
+        <option value="gestao">Listas Gerais</option>
+        <option value="professor">Professores (Por Matéria)</option>
+        <option value="aluno">Aluno (Caderno Pessoal)</option>
+      </select>
+    </div>
+    {% if usuario_logado.perfil == 'aluno' %}
+    <div>
+      <label class="field-label">Situação</label>
+      <select id="filtro-pag-lista-status" onchange="filterExistingLists()">
+        <option value="">Todas</option>
+        <option value="pendente">Pendentes / Em andamento</option>
+        <option value="concluida">Concluídas</option>
+      </select>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<div
+  class="subject-grid"
+  id="grid-listas-existentes"
+  style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr))"
+>
+  {% for l in listas_visiveis %}
+  <div
+    class="card card-lista-existente {% if l.concluida %}list-card-done{% endif %}"
+    data-cat="{{ l.categoria|lower }}"
+    data-perfil="{{ l.perfil_autor }}"
+    data-status="{{ 'concluida' if l.concluida else 'pendente' }}"
+    style="
+      margin-bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+    "
+  >
+    <div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px;">
+        <div class="tags-row" style="margin-bottom: 0;">
+          {% if l.perfil_autor == 'gestao' %}
+          <span class="pill pill-code">Geral</span>
+          {% elif l.perfil_autor == 'professor' %}
+          <span class="pill pill-primary"
+            >{{ l.categoria }}{% if l.frente_autor %} ({{ l.frente_autor }}){%
+            endif %}</span
+          >
+          {% else %}
+          <span class="pill pill-neutral">Caderno Pessoal</span>
+          {% endif %}
+
+          <span class="pill pill-neutral" style="font-family: var(--font-mono)"
+            >{{ l.total_questoes }} questões</span
+          >
+
+          {% if l.concluida %}
+          <span class="pill pill-leaf">Concluída</span>
+          {% elif l.em_andamento %}
+          <span class="pill pill-sun"
+            >{{ l.resolvidas_aluno }}/{{ l.total_questoes }} feitas</span
+          >
+          {% endif %}
+        </div>
+        {% if l.pode_excluir %}
+        <form action="{{ url_for('deleteListRoute', id_lista=l.id_lista) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a lista &quot;{{ l.titulo }}&quot;?');" style="flex-shrink: 0;">
+          <input type="hidden" name="origem" value="listas" />
+          <button type="submit" class="btn-icon-action danger" title="Excluir lista" style="width: 32px; height: 32px; margin-left: 0;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      <h3
+        style="
+          font-family: var(--font-display);
+          font-size: 18px;
+          margin-bottom: 6px;
+        "
+      >
+        {{ l.titulo }}
+      </h3>
+      <p style="font-size: 13px; color: var(--ink-subtle)">
+        Criada por {{ l.autor }} • {{ 'Tarefa / Pública' if l.publica else
+        'Privada' }}
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+        <a
+          href="{{ url_for('questionsPage', lista=l.id_lista) }}"
+          class="btn btn-primary"
+          style="min-height: 40px; padding: 6px 10px; font-size: 13px"
+        >
+          Estudar Lista
+        </a>
+        <a
+          href="{{ url_for('mockExamPage', lista=l.id_lista) }}"
+          class="btn btn-green"
+          style="min-height: 40px; padding: 6px 10px; font-size: 13px"
+        >
+          Fazer Simulado
+        </a>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+        <a
+          href="{{ url_for('exportListPdf', id_lista=l.id_lista) }}"
+          class="btn btn-outline"
+          style="min-height: 38px; padding: 6px 10px; font-size: 13px"
+        >
+          PDF
+        </a>
+        <a
+          href="{{ url_for('exportListPdf', id_lista=l.id_lista, gabarito=1) }}"
+          class="btn btn-outline"
+          style="min-height: 38px; padding: 6px 10px; font-size: 13px"
+        >
+          PDF + Gabarito
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<p
+  id="msg-listas-existentes-vazio"
+  class="card"
+  style="
+    display: none;
+    text-align: center;
+    color: var(--ink-muted);
+    margin-top: 12px;
+  "
+>
+  Nenhuma lista encontrada para esse filtro.
+</p>
+
+<section class="card" style="margin-top: 28px">
+  <div
+    style="
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    "
+  >
+    <div>
+      <h2 style="font-family: var(--font-display); font-size: 20px">
+        Montar Nova Lista de Exercícios
+      </h2>
+      <p style="font-size: 14px; color: var(--ink-subtle)">
+        Filtre e marque as questões desejadas &nbsp;→&nbsp; Clique em
+        <strong>Avançar para Criar Lista</strong> para definir nome{% if
+        usuario_logado.perfil in ['professor', 'gestao'] %}, visibilidade{%
+        endif %} e PDF.
+      </p>
+    </div>
+    <span
+      class="pill pill-leaf"
+      id="contador-selecionadas"
+      style="font-size: 14px; padding: 8px 16px"
+    >
+      0 questões selecionadas
+    </span>
+  </div>
+
+  <div
+    style="
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    "
+  >
+    <div class="filter-row-search">
+      <div>
+        <label class="field-label">Buscar no enunciado ou assunto</label>
+        <input
+          type="text"
+          id="filtro-lista-busca"
+          placeholder="Filtrar por palavra-chave..."
+          oninput="filterBuilderQuestions()"
+        />
+      </div>
+      <div style="display: flex; gap: 6px">
+        <button
+          type="button"
+          class="btn btn-outline"
+          style="padding: 8px 12px; font-size: 13px"
+          onclick="selectVisibleQuestions(true)"
+        >
+          Marcar visíveis
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline"
+          style="padding: 8px 12px; font-size: 13px"
+          onclick="selectVisibleQuestions(false)"
+        >
+          Desmarcar
+        </button>
+      </div>
+    </div>
+    <div class="filter-row-selects">
+      <div>
+        <label class="field-label">Disciplina</label>
+        <select id="filtro-lista-disc" onchange="filterBuilderQuestions()">
+          <option value="">Todas</option>
+          {% for d in disciplinas_unicas %}
+          <option value="{{ d|lower }}">{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Vestibular</label>
+        <select id="filtro-lista-vest" onchange="filterBuilderQuestions()">
+          <option value="">Todos</option>
+          {% for v in vestibulares_unicos %}
+          <option value="{{ v|lower }}">{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Ano</label>
+        <select id="filtro-lista-ano" onchange="filterBuilderQuestions()">
+          <option value="">Todos</option>
+          {% for a in anos_unicos %}
+          <option value="{{ a }}">{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Formato</label>
+        <select id="filtro-lista-tipo" onchange="filterBuilderQuestions()">
+          <option value="">Todos</option>
+          <option value="somatoria">Somatória</option>
+          <option value="multipla escolha">Múltipla Escolha</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Dificuldade</label>
+        <select id="filtro-lista-dif" onchange="filterBuilderQuestions()">
+          <option value="">Todas</option>
+          <option value="facil">Fácil</option>
+          <option value="media">Média</option>
+          <option value="dificil">Difícil</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div
+    id="container-questoes-lista"
+    style="
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 12px;
+      background: var(--surface);
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    "
+  >
+    {% for q in todas_questoes %}
+    <label
+      class="item-questao-lista"
+      data-disciplina="{{ q.disciplinas_str|lower }}"
+      data-vestibular="{{ q.instituicao|lower }}"
+      data-ano="{{ q.ano }}"
+      data-tipo="{{ q.tipo|lower }}"
+      data-dificuldade="{{ q.dificuldade|lower }}"
+      data-texto="{{ (q.enunciado ~ ' ' ~ q.disciplinas_str ~ ' ' ~ q.assuntos_str)|lower }}"
+      style="
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px;
+        background: var(--bg);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        cursor: pointer;
+      "
+    >
+      <input
+        type="checkbox"
+        value="{{ q.id_questao }}"
+        class="chk-q-lista"
+        onchange="updateListBuilderCounter()"
+        style="width: 20px; min-height: 20px; margin-top: 3px; flex-shrink: 0"
+      />
+      <div style="flex: 1">
+        <div class="tags-row" style="margin-bottom: 6px">
+          <span class="pill pill-code" style="font-size: 12px"
+            >Q{{ '%03d'|format(q.id_questao) }}</span
+          >
+          <span class="pill pill-leaf" style="font-size: 12px"
+            >{{ q.instituicao }} {{ q.ano }}</span
+          >
+          {% if q.disciplinas_str %}
+          <span class="pill pill-primary" style="font-size: 12px"
+            >{{ q.disciplinas_str }}</span
+          >
+          {% endif %}
+          <span class="pill pill-neutral" style="font-size: 12px"
+            >{{ 'Somatória' if q.tipo == 'Somatoria' else 'Múltipla Escolha'
+            }}</span
+          >
+          <span class="pill pill-sun" style="font-size: 12px"
+            >{{ q.dificuldade }}</span
+          >
+        </div>
+        <div style="font-size: 15px; color: var(--ink)">
+          {{ q.enunciado|formatQuestionText|safe }}
+        </div>
+      </div>
+    </label>
+    {% endfor %}
+  </div>
+
+  <div
+    style="
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    "
+  >
+    <span
+      style="font-size: 14px; color: var(--ink-subtle)"
+      id="aviso-selecao-lista"
+    >
+      Selecione ao menos uma questão acima para criar sua lista ou fazer um
+      simulado.
+    </span>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap">
+      <button
+        type="button"
+        class="btn btn-green"
+        onclick="startMockExamFromBuilder()"
+      >
+        Fazer Simulado Cronometrado
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        style="min-height: 46px"
+        onclick="openFinalizeListModal()"
+      >
+        Avançar para Criar Lista →
+      </button>
+    </div>
+  </div>
+</section>
+
+<div
+  class="modal-backdrop"
+  id="modal-finalizar-lista"
+  onclick="if (event.target === this) this.classList.remove('open');"
+>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h3
+          style="
+            font-family: var(--font-display);
+            font-size: 20px;
+            color: var(--ink);
+          "
+        >
+          Finalizar Nova Lista
+        </h3>
+        <p
+          style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px"
+          id="modal-lista-resumo"
+        >
+          0 questões selecionadas.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="modal-close"
+        onclick="
+          document
+            .getElementById('modal-finalizar-lista')
+            .classList.remove('open')
+        "
+      >
+        ×
+      </button>
+    </div>
+
+    <form action="{{ url_for('createListRoute') }}" method="POST">
+      <input type="hidden" name="origem" value="listas" />
+      <input
+        type="hidden"
+        name="questoes_ids_csv"
+        id="modal-ids-csv"
+        value=""
+      />
+
+      <div style="margin-bottom: 16px">
+        <label class="field-label">Nome da lista ou caderno</label>
+        <input
+          type="text"
+          name="titulo"
+          id="modal-titulo-lista"
+          placeholder="Ex: Lista 03 — Revisão de Eletrodinâmica e Química"
+          required
+        />
+      </div>
+
+      {% if usuario_logado.perfil in ['professor', 'gestao'] %}
+      <div style="margin-bottom: 16px">
+        <label class="field-label">Visibilidade e Destino</label>
+        <div class="radio-card-group">
+          <label class="radio-card">
+            <input type="radio" name="publica" value="true" checked />
+            <div>
+              <strong>Adicionar como tarefa dos alunos</strong>
+              <span
+                >Fica disponível no portal de todos os alunos das Turmas A e
+                B.</span
+              >
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="publica" value="false" />
+            <div>
+              <strong>Manter privada (apenas para mim)</strong>
+              <span>Visível somente na sua conta docente/gestão.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      {% else %}
+      <input type="hidden" name="publica" value="false" />
+      <div
+        style="
+          padding: 10px 14px;
+          background: var(--surface);
+          border: 1px solid var(--outline);
+          border-radius: 12px;
+          font-size: 13px;
+          color: var(--ink-muted);
+          margin-bottom: 16px;
+        "
+      >
+        Salvo como <strong>Caderno Pessoal (privado)</strong> na sua conta de
+        estudante.
+      </div>
+      {% endif %}
+
+      <div style="margin-bottom: 22px">
+        <label class="field-label">Deseja gerar o PDF automaticamente?</label>
+        <div class="radio-card-group">
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="salvar" checked />
+            <div>
+              <strong>Apenas salvar no portal</strong>
+              <span>Você poderá baixar o PDF depois quando quiser.</span>
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="pdf" />
+            <div>
+              <strong>Salvar e gerar PDF</strong>
+              <span>Baixa o arquivo formatado.</span>
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="pdf_gabarito" />
+            <div>
+              <strong>Salvar e gerar PDF + Gabarito</strong>
+              <span>Baixa o PDF incluindo o gabarito oficial ao final.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px">
+        <button
+          type="button"
+          class="btn btn-outline"
+          onclick="
+            document
+              .getElementById('modal-finalizar-lista')
+              .classList.remove('open')
+          "
+        >
+          Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary">
+          Confirmar e Criar Lista
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  function filterExistingLists() {
+      const cat = (document.getElementById('filtro-pag-lista-cat')?.value || '').toLowerCase();
+      const perfil = (document.getElementById('filtro-pag-lista-perfil')?.value || '').toLowerCase();
+      const status = (document.getElementById('filtro-pag-lista-status')?.value || '').toLowerCase();
+      let visiveis = 0;
+
+      document.querySelectorAll('.card-lista-existente').forEach(card => {
+          const okCat = !cat || card.dataset.cat === cat;
+          const okPerfil = !perfil || card.dataset.perfil === perfil;
+          const okStatus = !status || card.dataset.status === status;
+          const mostrar = okCat && okPerfil && okStatus;
+          card.style.display = mostrar ? 'flex' : 'none';
+          if (mostrar) visiveis += 1;
+      });
+
+      const msgVazia = document.getElementById('msg-listas-existentes-vazio');
+      if (msgVazia) msgVazia.style.display = visiveis === 0 ? 'block' : 'none';
+  }
+
+  function filterBuilderQuestions() {
+      const busca = document.getElementById('filtro-lista-busca').value.trim().toLowerCase();
+      const disc = document.getElementById('filtro-lista-disc').value;
+      const vest = document.getElementById('filtro-lista-vest').value;
+      const ano = document.getElementById('filtro-lista-ano').value;
+      const tipo = document.getElementById('filtro-lista-tipo').value;
+      const dif = document.getElementById('filtro-lista-dif').value;
+
+      document.querySelectorAll('.item-questao-lista').forEach(el => {
+          const okBusca = !busca || el.dataset.texto.includes(busca);
+          const okDisc = !disc || el.dataset.disciplina.includes(disc);
+          const okVest = !vest || el.dataset.vestibular === vest;
+          const okAno = !ano || el.dataset.ano === ano;
+          const okTipo = !tipo || el.dataset.tipo === tipo;
+          const okDif = !dif || el.dataset.dificuldade === dif;
+          el.style.display = (okBusca && okDisc && okVest && okAno && okTipo && okDif) ? 'flex' : 'none';
+      });
+  }
+
+  function getSelectedQuestionIds() {
+      return Array.from(document.querySelectorAll('.chk-q-lista:checked')).map(c => c.value);
+  }
+
+  function updateListBuilderCounter() {
+      const total = getSelectedQuestionIds().length;
+      document.getElementById('contador-selecionadas').textContent =
+          total === 1 ? '1 questão selecionada' : `${total} questões selecionadas`;
+  }
+
+  function selectVisibleQuestions(marcar) {
+      document.querySelectorAll('.item-questao-lista').forEach(el => {
+          if (el.style.display !== 'none') {
+              el.querySelector('.chk-q-lista').checked = marcar;
+          }
+      });
+      updateListBuilderCounter();
+  }
+
+  function openFinalizeListModal() {
+      const ids = getSelectedQuestionIds();
+      if (ids.length === 0) {
+          alert('Marque ao menos uma questão antes de criar a lista.');
+          return;
+      }
+      document.getElementById('modal-ids-csv').value = ids.join(',');
+      document.getElementById('modal-lista-resumo').textContent =
+          ids.length === 1 ? '1 questão selecionada para esta lista.' : `${ids.length} questões selecionadas para esta lista.`;
+      document.getElementById('modal-finalizar-lista').classList.add('open');
+      setTimeout(() => document.getElementById('modal-titulo-lista').focus(), 60);
+  }
+
+  function startMockExamFromBuilder() {
+      const ids = getSelectedQuestionIds();
+      if (ids.length === 0) {
+          alert('Marque ao menos uma questão para iniciar o simulado.');
+          return;
+      }
+      window.location.href = `/simulado?ids=${encodeURIComponent(ids.join(','))}`;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+      document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+              document.getElementById('modal-finalizar-lista').classList.remove('open');
+          }
+      });
+      {% if baixar_pdf %}
+          const urlPdf = "{{ url_for('exportListPdf', id_lista=baixar_pdf, gabarito=1) if baixar_gab else url_for('exportListPdf', id_lista=baixar_pdf) }}";
+          setTimeout(() => { window.location.href = urlPdf; }, 350);
+      {% endif %}
+  });
+</script>
+{% endblock %}

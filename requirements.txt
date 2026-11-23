@@ -1,0 +1,8 @@
+flask
+gunicorn
+psycopg2-binary
+pandas
+matplotlib
+google-genai
+pymupdf
+werkzeug

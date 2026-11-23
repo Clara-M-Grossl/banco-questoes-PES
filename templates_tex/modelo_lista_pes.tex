@@ -1,0 +1,158 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+
+
+\newcommand{\nomelista}{%%NOMELISTA%%}
+\newcommand{\disciplina}{%%DISCIPLINA%%}
+
+\newcommand{\logopes}{assets/logo-pes.png}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[portuguese]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{fontawesome5}
+
+\usepackage{geometry}
+\geometry{
+    a4paper,
+    top=1.5cm,
+    bottom=1.5cm,
+    left=1.2cm,
+    right=1.2cm,
+    headheight=25pt,
+    headsep=0.4cm,
+    columnsep=0.8cm
+}
+
+\setlength{\columnseprule}{0.5pt}
+\def\columnseprulecolor{\color{black!30}}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+
+\fancyhead[L]{
+    \raisebox{-0.3cm}{
+        \includegraphics[height=0.85cm,keepaspectratio]{\logopes}
+    }
+}
+
+\fancyhead[R]{
+    \footnotesize\textbf{Disciplina:} \disciplina
+}
+
+\fancyfoot[C]{\footnotesize Página \thepage}
+
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\headrule}{
+    \hbox to\headwidth{
+        \color{black!70}
+        \leaders\hrule height \headrulewidth\hfill
+    }
+}
+\renewcommand{\footrulewidth}{0pt}
+
+
+\usepackage{enumitem}
+
+\newlist{opcoes}{enumerate}{1}
+\setlist[opcoes]{
+    label=\textbf{\alph*)},
+    leftmargin=0.6cm,
+    labelwidth=0.4cm,
+    labelsep=0.2cm,
+    align=left,
+    topsep=6pt,
+    itemsep=4pt
+}
+
+\newlist{opcoessoma}{itemize}{1}
+\setlist[opcoessoma]{
+    leftmargin=0.8cm,
+    labelwidth=0.6cm,
+    labelsep=0.2cm,
+    align=left,
+    topsep=6pt,
+    itemsep=4pt
+}
+
+
+\newcounter{questao}
+\renewcommand{\thequestao}{\arabic{questao}}
+
+\newcommand{\questaoheader}[2]{
+    \par\vspace{12pt}
+    \noindent
+    \colorbox{black!85}{
+        \textcolor{white}{
+            \textbf{\footnotesize \vphantom{Ag} #1}
+        }
+    }
+    \hspace{4pt}
+    \textbf{#2 \thequestao}
+    \textcolor{black!30}{\dotfill}
+    \par\vspace{6pt}
+}
+
+\newcommand{\enem}{
+    \refstepcounter{questao}
+    \questaoheader{\faUniversity\ ENEM}{Questão}
+}
+
+\newcommand{\ufsc}{
+    \refstepcounter{questao}
+    \questaoheader{\faLandmark\ UFSC}{Questão}
+}
+
+\newcommand{\udesc}{
+    \refstepcounter{questao}
+    \questaoheader{\faUniversity\ UDESC}{Questão}
+}
+
+\newcommand{\aleatorio}{
+    \refstepcounter{questao}
+    \questaoheader{\faBook\ OUTROS}{Questão}
+}
+
+
+\newcommand{\soma}{
+    \par\nobreak\vspace{6pt}
+    \hfill
+    \colorbox{black!10}{
+        \textbf{SOMA:}\ \makebox[1.2cm]{\dotfill}
+    }
+    \par\vspace{8pt}
+}
+
+
+
+\begin{document}
+
+\twocolumn[{
+\begin{center}
+    \hrule height 1.5pt
+    \vspace{0.2cm}
+
+    {\Large \textbf{\nomelista}}
+
+    \vspace{0.2cm}
+    \hrule height 1.5pt
+\end{center}
+
+\vspace{4mm}
+}]
+
+
+%%QUESTOES%%
+
+%%SECAO_GABARITO%%
+
+\end{document}

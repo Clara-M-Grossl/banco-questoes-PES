@@ -1,0 +1,189 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios - Cursinho PES{% endblock %}
+{% block page_title %}Relatórios{% endblock %}
+{% block page_subtitle %}Acompanhamento de desempenho das turmas, disciplinas, pontos de atenção e cobertura do acervo{% endblock %}
+
+{% block content %}
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card">
+            <div class="stat-label">Acervo Total</div>
+            <div class="stat-value">{{ resumo_kpi.total_questoes }}</div>
+            <div class="stat-foot">Questões ativas no banco</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Resoluções Feitas</div>
+            <div class="stat-value">{{ resumo_kpi.total_resolucoes }}</div>
+            <div class="stat-foot">Por {{ resumo_kpi.total_alunos_ativos }} estudante(s) ativo(s)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Taxa Média de Acerto</div>
+            <div class="stat-value" style="color: var(--leaf);">{{ resumo_kpi.taxa_acerto }}%</div>
+            <div class="stat-foot">Média geral das turmas</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Tempo Médio</div>
+            <div class="stat-value">{{ resumo_kpi.tempo_medio }}s</div>
+            <div class="stat-foot">Por questão resolvida</div>
+        </div>
+    </div>
+
+    {% for r in relatorios %}
+        <section class="card report-card-anim">
+            <h2 style="font-family: var(--font-display); font-size: 19px; margin-bottom: 4px;">{{ r.titulo }}</h2>
+            <p style="font-size: 14px; color: var(--ink-subtle); margin-bottom: 18px;">{{ r.descricao }}</p>
+
+            <div class="report-split-grid">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                {% for col in r.colunas %}
+                                    <th>{{ col }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if r.linhas %}
+                                {% for linha in r.linhas %}
+                                    <tr>
+                                        {% for cel in linha %}
+                                            <td>{{ cel }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="{{ r.colunas|length }}" style="text-align: center; color: var(--ink-subtle); padding: 20px;">
+                                        Sem dados suficientes registrados ainda.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="report-chart-box">
+                    <canvas id="{{ r.id }}" height="240"></canvas>
+                </div>
+            </div>
+        </section>
+    {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+    const REPORT_CHARTS = [
+        {% for r in relatorios %}
+            { id: {{ r.id|tojson }}, chart: {{ r.chart|tojson }} }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    function buildChartConfig(spec) {
+        const isHorizontal = spec.type === 'horizontalBar';
+        const isDoughnut = spec.type === 'doughnut';
+        const chartType = isHorizontal ? 'bar' : spec.type;
+
+        const datasets = spec.datasets.map(ds => {
+            if (isDoughnut) {
+                return {
+                    label: ds.label,
+                    data: ds.data,
+                    backgroundColor: ds.colors || ['#5E1728', '#265321', '#B45309', '#475569', '#8B5CF6'],
+                    borderColor: '#FFFFFF',
+                    borderWidth: 3,
+                    hoverOffset: 10
+                };
+            }
+            return {
+                label: ds.label,
+                data: ds.data,
+                backgroundColor: ds.color || '#5E1728',
+                borderRadius: 8,
+                maxBarThickness: 36
+            };
+        });
+
+        return {
+            type: chartType,
+            data: {
+                labels: spec.labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: isHorizontal ? 'y' : 'x',
+                animation: {
+                    duration: 950,
+                    easing: 'easeOutQuart'
+                },
+                plugins: {
+                    legend: {
+                        display: isDoughnut || spec.datasets.length > 1,
+                        position: isDoughnut ? 'bottom' : 'top',
+                        labels: {
+                            font: { family: 'Atkinson Hyperlegible, sans-serif', size: 12, weight: 'bold' },
+                            color: '#334155',
+                            usePointStyle: true,
+                            padding: 14
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#0F172A',
+                        padding: 10,
+                        cornerRadius: 10,
+                        titleFont: { family: 'Nunito, sans-serif', size: 13, weight: 'bold' },
+                        bodyFont: { family: 'Atkinson Hyperlegible, sans-serif', size: 13 }
+                    }
+                },
+                scales: isDoughnut ? {} : {
+                    x: {
+                        grid: { display: isHorizontal, color: '#E2E8F0' },
+                        ticks: { color: '#475569', font: { size: 11 } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { display: !isHorizontal, color: '#E2E8F0' },
+                        ticks: { color: '#475569', font: { size: 11 } }
+                    }
+                }
+            }
+        };
+    }
+
+    function initAnimatedReports() {
+        const rendered = new Set();
+
+        function renderOne(item) {
+            if (rendered.has(item.id)) return;
+            const canvas = document.getElementById(item.id);
+            if (!canvas || !item.chart.labels || item.chart.labels.length === 0) return;
+            rendered.add(item.id);
+            new Chart(canvas.getContext('2d'), buildChartConfig(item.chart));
+        }
+
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const item = REPORT_CHARTS.find(r => r.id === entry.target.id);
+                        if (item) renderOne(item);
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.15 });
+
+            REPORT_CHARTS.forEach(item => {
+                const el = document.getElementById(item.id);
+                if (el) observer.observe(el);
+            });
+        } else {
+            REPORT_CHARTS.forEach(renderOne);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', initAnimatedReports);
+</script>
+{% endblock %}

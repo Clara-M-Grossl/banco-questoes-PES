@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}Início — Cursinho PES{% endblock %}
+{% block page_title %}Olá, {{ usuario_logado.nome }}{% endblock %}
+{% block page_subtitle %}{{ usuario_logado.descricao_perfil }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url_for('questionsPage') }}" class="btn btn-primary">Resolver Questões</a>
+{% endblock %}
+
+{% block content %}
+
+    <div class="stats-grid">
+        {% if usuario_logado.perfil == 'aluno' %}
+            <div class="stat-card">
+                <div class="stat-label">Questões Resolvidas</div>
+                <div class="stat-value">{{ metricas.resolvidas }}</div>
+                <div class="stat-foot">Registradas no seu histórico</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Taxa de Acerto</div>
+                <div class="stat-value" style="color: var(--leaf);">{{ metricas.taxa_acerto }}%</div>
+                <div class="stat-foot">{{ metricas.acertos }} acertos confirmados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tempo Médio</div>
+                <div class="stat-value">{{ metricas.tempo_medio }}s</div>
+                <div class="stat-foot">Por questão respondida</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Acervo Disponível</div>
+                <div class="stat-value">{{ metricas.total_questoes }}</div>
+                <div class="stat-foot">Questões cadastradas no PES</div>
+            </div>
+        {% else %}
+            <div class="stat-card">
+                <div class="stat-label">Acervo de Questões</div>
+                <div class="stat-value">{{ metricas.total_questoes }}</div>
+                <div class="stat-foot">UFSC, ENEM, UDESC e Autoral</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Estudantes Ativos</div>
+                <div class="stat-value">{{ metricas.total_alunos }}</div>
+                <div class="stat-foot">Turmas A e B do PES</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Resoluções Registradas</div>
+                <div class="stat-value" style="color: var(--leaf);">{{ metricas.total_resolucoes }}</div>
+                <div class="stat-foot">Taxa média de {{ metricas.taxa_acerto }}% de acertos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Listas de Exercícios</div>
+                <div class="stat-value">{{ metricas.total_listas }}</div>
+                <div class="stat-foot">Cadernos e simulados</div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+        <h2 style="font-family: var(--font-display); font-size: 20px;">Disciplinas do Cursinho</h2>
+        <a href="{{ url_for('questionsPage') }}" style="color: var(--primary); font-weight: 700; text-decoration: none; font-size: 14px;">Ver todas as questões →</a>
+    </div>
+
+    <div class="subject-grid">
+        {% for d in disciplinas %}
+            <a href="{{ url_for('questionsPage', disciplina=d.nome) }}" class="subject-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="subject-title">{{ d.nome }}</span>
+                    <span class="pill pill-primary" style="font-family: var(--font-mono);">{{ d.total_questoes }}</span>
+                </div>
+                <span style="font-size: 13px; color: var(--ink-subtle);">{{ d.area }} • {{ d.total_frentes }} frente(s)</span>
+                <div class="progress-track">
+                    <div class="progress-fill" style="width: {{ d.percentual }}%;"></div>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+
+    {% if usuario_logado.perfil == 'aluno' %}
+        <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+                <div>
+                    <h2 style="font-family: var(--font-display); font-size: 19px;">Suas Últimas Resoluções</h2>
+                    <p style="font-size: 13px; color: var(--ink-subtle);">Clique em qualquer questão para rever sua resposta ou refazer caso tenha errado.</p>
+                </div>
+            </div>
+            {% if historico %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Questão</th>
+                                <th>Banca</th>
+                                <th>Resultado</th>
+                                <th>Resposta</th>
+                                <th>Tempo</th>
+                                <th>Data</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in historico %}
+                                <tr class="clickable-row" onclick="openResolvedQuestion('{{ url_for('questionsPage', questao=h.id_questao) }}')" title="Abrir questão #{{ '%02d'|format(h.id_questao) }}">
+                                    <td><a href="{{ url_for('questionsPage', questao=h.id_questao) }}" style="color: var(--primary); font-weight: 700; text-decoration: none;" onclick="event.stopPropagation();">#{{ '%02d'|format(h.id_questao) }}</a></td>
+                                    <td>{{ h.instituicao }} {{ h.ano }}</td>
+                                    <td>
+                                        {% if h.acerto %}
+                                            <span class="pill pill-leaf">Acertou</span>
+                                        {% else %}
+                                            <span class="pill pill-coral">Errou • Refazer</span>
+                                        {% endif %}
+                                    </td>
+                                    <td style="font-family: var(--font-mono);">{{ '%02d'|format(h.resposta_aluno) }}</td>
+                                    <td style="font-family: var(--font-mono);">{{ h.tempo_gasto }}s</td>
+                                    <td>{{ h.data.strftime('%d/%m/%Y %H:%M') if h.data else '-' }}</td>
+                                    <td style="text-align: right;">
+                                        <span class="row-open-cue">{{ 'Rever →' if h.acerto else 'Refazer →' }}</span>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p style="color: var(--ink-muted);">Você ainda não respondeu nenhuma questão. Acesse o Banco de Questões para começar.</p>
+            {% endif %}
+        </section>
+    {% else %}
+        <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h2 style="font-family: var(--font-display); font-size: 19px;">Atalhos de Docência e Gestão</h2>
+            </div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="{{ url_for('newQuestionPage') }}" class="btn btn-primary">Importar PDF ou Imagem de Prova</a>
+                <a href="{{ url_for('reportsPage') }}" class="btn btn-leaf">Abrir Relatórios Pedagógicos</a>
+                <a href="{{ url_for('listsPage') }}" class="btn btn-outline">Criar Lista de Exercícios</a>
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openResolvedQuestion(url) {
+        window.location.href = url;
+    }
+</script>
+{% endblock %}

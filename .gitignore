@@ -1,0 +1,29 @@
+# Python cache e bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambiente virtual e segredos locais
+.env
+.venv/
+venv/
+
+# Uploads locais de figuras (mantem apenas a pasta via .gitkeep)
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Dados temporarios e compilacao LaTeX
+data/relatos_revisao.json
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.bcf
+*.blg
+*.run.xml
+
+# Sistema operacional / IDE
+.DS_Store
+Thumbs.db
+.vscode/

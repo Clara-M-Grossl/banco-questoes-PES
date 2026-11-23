@@ -1,0 +1,1779 @@
+{% extends 'base.html' %} {% block title %}{% if f_questao %}Questão Q{{ '%03d'|format(f_questao|int) }} — Cursinho PES{% elif f_ids %}Questões Importadas — Cursinho PES{% elif lista_ativa %}{{
+lista_ativa.titulo }} — Cursinho PES{% else %}Banco de Questões — Cursinho PES{%
+endif %}{% endblock %} {% block page_title %}{% if f_questao %}Questão Q{{ '%03d'|format(f_questao|int) }}{% elif f_ids %}Questões Importadas ({{ total_encontradas }}){% elif lista_ativa %}{{
+lista_ativa.titulo }}{% else %}Banco de Questões{% endif %}{% endblock %} {%
+block page_subtitle %}{% if f_questao %}Visualização direta da questão selecionada{% elif f_ids %}Exibindo exatamente as {{ total_encontradas }} questão(ões) recém-importadas{% elif lista_ativa %}Estudando lista ({{
+lista_ativa.total_questoes }} questões) • Criada por {{ lista_ativa.autor }}{%
+else %}Exibindo {{ questoes|length }} de {{ total_encontradas }} questão(ões) —
+Página {{ pagina }} de {{ total_paginas }}{% endif %}{% endblock %} {% block
+topbar_actions %}
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+  {% if f_questao or f_ids %}
+  {% if usuario_logado.perfil in ['professor', 'gestao'] %}
+  <a href="{{ url_for('newQuestionPage') }}" class="btn btn-outline">
+    + Cadastrar outra
+  </a>
+  {% else %}
+  <a href="{{ url_for('dashboardPage') }}" class="btn btn-outline">
+    ← Voltar ao Início
+  </a>
+  {% endif %}
+  <a href="{{ url_for('questionsPage') }}" class="btn btn-primary">
+    Ver Banco Completo
+  </a>
+  {% elif lista_ativa %}
+  <a
+    href="{{ url_for('mockExamPage', lista=lista_ativa.id_lista) }}"
+    class="btn btn-green"
+  >
+    Fazer Simulado Cronometrado
+  </a>
+  <a href="{{ url_for('questionsPage') }}" class="btn btn-outline">
+    Voltar ao Banco
+  </a>
+  {% else %}
+  <button type="button" class="btn btn-green" onclick="openRandomMockExamModal()">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <circle cx="12" cy="13" r="8"></circle>
+      <path d="M12 9v4l2.5 2.5"></path>
+      <path d="M5 3 2 6"></path>
+      <path d="m22 6-3-3"></path>
+      <path d="M12 2v3"></path>
+    </svg>
+    Simulado Aleatório
+  </button>
+  {% if usuario_logado.perfil in ['professor', 'gestao'] %}
+  <a href="{{ url_for('newQuestionPage') }}" class="btn btn-primary"
+    >Nova Questão</a
+  >
+  {% endif %} {% endif %}
+</div>
+{% endblock %} {% block content %} {% if not lista_ativa and not f_questao and not f_ids %}
+<section style="margin-bottom: 22px">
+  <div
+    style="
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 10px;
+      flex-wrap: wrap;
+    "
+  >
+    <h2 style="font-family: var(--font-display); font-size: 18px">
+      Filtrar por Matéria
+    </h2>
+    <span style="font-size: 13px; color: var(--ink-subtle)"
+      >Clique em uma disciplina para explorar o acervo</span
+    >
+  </div>
+
+  <div class="subject-grid-compact">
+    <a
+      href="{{ url_for('questionsPage') }}"
+      class="subject-card-compact {% if not f_disciplina and not f_lista %}active{% endif %}"
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 6px;
+        "
+      >
+        <span class="subject-name">Todas</span>
+        <span
+          class="pill pill-primary"
+          style="
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 2px 9px;
+          "
+          >{{ total_acervo }}</span
+        >
+      </div>
+      <span class="subject-meta">Todo o banco do PES</span>
+    </a>
+
+    {% for d in disciplinas_cards %}
+    <a
+      href="{{ url_for('questionsPage', disciplina=d.nome, vestibular=f_vestibular, ano=f_ano, tipo=f_tipo, dificuldade=f_dificuldade) }}"
+      class="subject-card-compact {% if f_disciplina|lower == d.nome|lower %}active{% endif %}"
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 6px;
+        "
+      >
+        <span class="subject-name">{{ d.nome }}</span>
+        <span
+          class="pill {{ 'pill-code' if f_disciplina|lower == d.nome|lower else 'pill-neutral' }}"
+          style="
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 2px 9px;
+          "
+          >{{ d.total_questoes }}</span
+        >
+      </div>
+      <span class="subject-meta">{{ d.total_frentes }} frente(s)</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="lists-panel">
+  <div class="lists-panel-header">
+    <div>
+      <h2
+        style="
+          font-family: var(--font-display);
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        "
+      >
+        Listas de Exercícios e Cadernos
+        <span
+          class="pill pill-leaf"
+          style="font-family: var(--font-mono); font-size: 12px"
+          >{{ listas_visiveis|length }}</span
+        >
+        {% if usuario_logado.perfil == 'aluno' %} {% set total_concluidas =
+        listas_visiveis|selectattr('concluida')|list|length %} {% if
+        total_concluidas > 0 %}
+        <span class="pill pill-leaf" style="font-size: 12px"
+          >✓ {{ total_concluidas }} concluída(s)</span
+        >
+        {% endif %} {% endif %}
+      </h2>
+      <p style="font-size: 13px; color: var(--ink-subtle); margin-top: 2px">
+        Clique em <strong>Mostrar listas</strong> para filtrar por matéria,
+        listas gerais ou cadernos pessoais.
+      </p>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap">
+      <button
+        type="button"
+        class="btn btn-outline"
+        id="btn-toggle-listas"
+        style="min-height: 36px; padding: 6px 14px; font-size: 13px"
+        onclick="toggleListsPanel()"
+      >
+        Mostrar listas ({{ listas_visiveis|length }})
+      </button>
+      <a
+        href="{{ url_for('listsPage') }}"
+        class="btn btn-outline"
+        style="min-height: 36px; padding: 6px 14px; font-size: 13px"
+      >
+        Ver página de Listas
+      </a>
+    </div>
+  </div>
+
+  <div id="corpo-painel-listas" style="display: none">
+    {% if listas_visiveis %}
+    <div class="lists-filter-bar">
+      <div>
+        <label class="field-label">Matéria / Categoria</label>
+        <select id="filtro-q-lista-cat" onchange="filterListCards()">
+          <option value="">Todas (Gerais e Matérias)</option>
+          <option value="geral">Geral</option>
+          <option value="meu caderno">Meu Caderno</option>
+          {% for d in disciplinas_unicas %}
+          <option value="{{ d|lower }}">{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Criada por</label>
+        <select id="filtro-q-lista-perfil" onchange="filterListCards()">
+          <option value="">Todos os criadores</option>
+          <option value="gestao">Listas Gerais</option>
+          <option value="professor">Professores (Por Matéria)</option>
+          <option value="aluno">Aluno (Caderno Pessoal)</option>
+        </select>
+      </div>
+      {% if usuario_logado.perfil == 'aluno' %}
+      <div>
+        <label class="field-label">Situação</label>
+        <select id="filtro-q-lista-status" onchange="filterListCards()">
+          <option value="">Todas</option>
+          <option value="pendente">Pendentes / Em andamento</option>
+          <option value="concluida">✓ Já concluídas</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="lists-mini-grid" id="grid-listas-banco">
+      {% for l in listas_visiveis %}
+      <div
+        class="list-mini-card {% if l.concluida %}list-card-done{% endif %}"
+        data-cat="{{ l.categoria|lower }}"
+        data-perfil="{{ l.perfil_autor }}"
+        data-status="{{ 'concluida' if l.concluida else 'pendente' }}"
+      >
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 6px;">
+            <div class="tags-row" style="margin-bottom: 0;">
+              {% if l.perfil_autor == 'gestao' %}
+              <span
+                class="pill pill-code"
+                style="font-size: 11px; padding: 2px 9px"
+                >Geral</span
+              >
+              {% elif l.perfil_autor == 'professor' %}
+              <span
+                class="pill pill-primary"
+                style="font-size: 11px; padding: 2px 9px"
+                >{{ l.categoria }}{% if l.frente_autor %} ({{ l.frente_autor }}){%
+                endif %}</span
+              >
+              {% else %}
+              <span
+                class="pill pill-neutral"
+                style="font-size: 11px; padding: 2px 9px"
+                >Caderno Pessoal</span
+              >
+              {% endif %}
+
+              <span
+                class="pill pill-neutral"
+                style="
+                  font-family: var(--font-mono);
+                  font-size: 11px;
+                  padding: 2px 9px;
+                "
+                >{{ l.total_questoes }} q.</span
+              >
+
+              {% if l.concluida %}
+              <span
+                class="pill pill-leaf"
+                style="font-size: 11px; padding: 2px 9px"
+                >✓ Concluída</span
+              >
+              {% elif l.em_andamento %}
+              <span
+                class="pill pill-sun"
+                style="font-size: 11px; padding: 2px 9px"
+                >{{ l.resolvidas_aluno }}/{{ l.total_questoes }} feitas</span
+              >
+              {% endif %}
+            </div>
+            {% if l.pode_excluir %}
+            <form action="{{ url_for('deleteListRoute', id_lista=l.id_lista) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a lista &quot;{{ l.titulo }}&quot;?');" style="flex-shrink: 0;">
+              <input type="hidden" name="origem" value="questoes" />
+              <button type="submit" class="btn-icon-action danger" title="Excluir lista" style="width: 28px; height: 28px; margin-left: 0;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+          <div
+            style="
+              font-family: var(--font-display);
+              font-weight: 800;
+              font-size: 15px;
+              color: var(--ink);
+              line-height: 1.3;
+            "
+          >
+            {{ l.titulo }}
+          </div>
+          <div
+            style="font-size: 12px; color: var(--ink-subtle); margin-top: 3px"
+          >
+            Por {{ l.autor }} - {{ 'Pública' if l.publica else 'Privada' }}
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap">
+          <a
+            href="{{ url_for('questionsPage', lista=l.id_lista) }}"
+            class="btn btn-primary"
+            style="
+              min-height: 32px;
+              padding: 4px 11px;
+              font-size: 12px;
+              flex: 1;
+            "
+          >
+            Abrir
+          </a>
+          <a
+            href="{{ url_for('mockExamPage', lista=l.id_lista) }}"
+            class="btn btn-green"
+            style="
+              min-height: 32px;
+              padding: 4px 11px;
+              font-size: 12px;
+              flex: 1;
+            "
+          >
+            Simulado
+          </a>
+          <a
+            href="{{ url_for('exportListPdf', id_lista=l.id_lista) }}"
+            class="btn btn-outline"
+            style="min-height: 32px; padding: 4px 9px; font-size: 12px"
+            title="Baixar PDF da prova"
+          >
+            PDF
+          </a>
+          <a
+            href="{{ url_for('exportListPdf', id_lista=l.id_lista, gabarito=1) }}"
+            class="btn btn-outline"
+            style="min-height: 32px; padding: 4px 9px; font-size: 12px"
+            title="Baixar PDF com gabarito"
+          >
+            Gab.
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p
+      id="msg-nenhuma-lista-filtro"
+      style="
+        display: none;
+        margin-top: 14px;
+        font-size: 14px;
+        color: var(--ink-muted);
+      "
+    >
+      Nenhuma lista encontrada para essa combinação de filtros.
+    </p>
+    {% else %}
+    <p style="margin-top: 14px; font-size: 14px; color: var(--ink-muted)">
+      Nenhuma lista criada ainda. Selecione questões abaixo para montar a sua
+      primeira lista!
+    </p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card" style="padding: 18px 22px">
+  <form action="{{ url_for('questionsPage') }}" method="GET">
+    {% if f_lista %}
+    <input type="hidden" name="lista" value="{{ f_lista }}" />
+    {% endif %}
+    <div class="filter-row-search">
+      <div>
+        <label class="field-label"
+          >Pesquisar por tema, assunto ou enunciado</label
+        >
+        <input
+          type="text"
+          name="busca"
+          value="{{ termo_busca }}"
+          placeholder="Digite palavras-chave da questão..."
+        />
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        {% if f_disciplina or f_vestibular or f_ano or f_dificuldade or f_tipo
+        or f_lista or termo_busca %}
+        <a href="{{ url_for('questionsPage') }}" class="btn btn-outline">Limpar</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="filter-row-selects">
+      <div>
+        <label class="field-label">Disciplina</label>
+        <select name="disciplina">
+          <option value="">Todas</option>
+          {% for d in disciplinas_unicas %}
+          <option value="{{ d }}" {% if f_disciplina == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Vestibular</label>
+        <select name="vestibular">
+          <option value="">Todos</option>
+          {% for v in vestibulares_unicos %}
+          <option value="{{ v }}" {% if f_vestibular == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Ano</label>
+        <select name="ano">
+          <option value="">Todos</option>
+          {% for a in anos_unicos %}
+          <option value="{{ a }}" {% if f_ano == (a|string) %}selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Formato</label>
+        <select name="tipo">
+          <option value="">Todos</option>
+          <option value="Somatoria" {% if f_tipo == 'Somatoria' %}selected{% endif %}>Somatória</option>
+          <option value="Multipla Escolha" {% if f_tipo == 'Multipla Escolha' %}selected{% endif %}>Múltipla Escolha</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Dificuldade</label>
+        <select name="dificuldade">
+          <option value="">Todas</option>
+          {% for dif in ['Facil', 'Media', 'Dificil'] %}
+          <option value="{{ dif }}" {% if f_dificuldade == dif %}selected{% endif %}>
+            {{ 'Fácil' if dif == 'Facil' else ('Média' if dif == 'Media' else 'Difícil') }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </form>
+  <div
+    style="
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--outline);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--ink-subtle);
+    "
+  >
+    <span
+      >Clique em <strong>Selecionar</strong> abaixo para montar sua lista
+      personalizada ou iniciar um simulado cronometrado.</span
+    >
+    <button
+      type="button"
+      class="btn btn-outline"
+      style="min-height: 30px; padding: 3px 12px; font-size: 12px"
+      onclick="selectAllPageQuestions()"
+    >
+      Selecionar questões desta página
+    </button>
+  </div>
+</section>
+{% elif lista_ativa %}
+
+<div class="list-active-banner">
+  <div>
+    <div class="tags-row" style="margin-bottom: 4px">
+      {% if lista_ativa.publica %}
+      <span class="pill pill-leaf" style="font-size: 12px"
+        >Tarefa / Lista Pública PES</span
+      >
+      {% else %}
+      <span class="pill pill-primary" style="font-size: 12px"
+        >Caderno Pessoal</span
+      >
+      {% endif %}
+      <span
+        class="pill pill-neutral"
+        style="font-family: var(--font-mono); font-size: 12px"
+        >{{ lista_ativa.total_questoes }} questões</span
+      >
+    </div>
+    <div
+      style="
+        font-family: var(--font-display);
+        font-size: 19px;
+        font-weight: 800;
+        color: var(--leaf-deep);
+      "
+    >
+      {{ lista_ativa.titulo }}
+    </div>
+    <div style="font-size: 13px; color: var(--ink-muted)">
+      Criada por {{ lista_ativa.autor }}
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap">
+    <a
+      href="{{ url_for('mockExamPage', lista=lista_ativa.id_lista) }}"
+      class="btn btn-green"
+      style="min-height: 38px; padding: 6px 14px; font-size: 13px"
+    >
+      Fazer como Simulado
+    </a>
+    <a
+      href="{{ url_for('exportListPdf', id_lista=lista_ativa.id_lista) }}"
+      class="btn btn-outline"
+      style="min-height: 38px; padding: 6px 14px; font-size: 13px"
+    >
+      PDF
+    </a>
+    <a
+      href="{{ url_for('exportListPdf', id_lista=lista_ativa.id_lista, gabarito=1) }}"
+      class="btn btn-outline"
+      style="min-height: 38px; padding: 6px 14px; font-size: 13px"
+    >
+      PDF + Gabarito
+    </a>
+  </div>
+</div>
+{% endif %} {% if not questoes %}
+<div class="card" style="text-align: center; padding: 48px 24px">
+  <p style="font-size: 18px; color: var(--ink-muted); margin-bottom: 16px">
+    Nenhuma questão encontrada para os filtros selecionados.
+  </p>
+  <a href="{{ url_for('questionsPage') }}" class="btn btn-outline"
+    >Ver todas as questões</a
+  >
+</div>
+{% endif %} {% for q in questoes %}
+{% set prev_res = ultimas_resolucoes.get(q.id_questao) %}
+<article
+  class="card"
+  id="questao-{{ q.id_questao }}"
+  data-qid="{{ q.id_questao }}"
+  data-tipo="{{ q.tipo }}"
+  data-gabarito="{{ q.soma_correta }}"
+  {% if prev_res %}
+  data-prev-resp="{{ prev_res.resposta_aluno }}"
+  data-prev-acerto="{{ 'true' if prev_res.acerto else 'false' }}"
+  data-prev-data="{{ prev_res.data }}"
+  {% endif %}
+>
+  {% if prev_res %}
+  <div class="prev-attempt-banner {{ 'ok' if prev_res.acerto else 'err' }}" id="prev-banner-{{ q.id_questao }}">
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      {% if prev_res.acerto %}
+        <span class="pill pill-leaf">✓ Você acertou esta questão</span>
+        <span style="font-size: 13px; color: var(--ink-muted);">Respondida em {{ prev_res.data }} • Sua resposta está destacada abaixo.</span>
+      {% else %}
+        <span class="pill pill-coral">↻ Você errou na última tentativa</span>
+        <span style="font-size: 13px; color: var(--ink-muted);">Respondida em {{ prev_res.data }} • Veja o que você marcou abaixo ou refaça agora!</span>
+      {% endif %}
+    </div>
+    <button
+      type="button"
+      class="btn {{ 'btn-outline' if prev_res.acerto else 'btn-primary' }}"
+      style="min-height: 36px; padding: 6px 14px; font-size: 13px; white-space: nowrap;"
+      onclick="redoQuestion({{ q.id_questao }})"
+    >
+      ↻ Refazer questão
+    </button>
+  </div>
+  {% endif %}
+
+  <div class="question-header">
+    <div class="tags-row">
+      <span class="pill pill-code">Q{{ '%03d'|format(q.id_questao) }}</span>
+      <span class="pill pill-leaf">{{ q.instituicao }} {{ q.ano }}</span>
+      <span class="pill pill-neutral"
+        >{{ 'Somatória' if q.tipo == 'Somatoria' else 'Múltipla Escolha'
+        }}</span
+      >
+      {% for disc_nome, disc_frente, ass_nome in q.assuntos %}
+      <span class="pill pill-primary"
+        >{{ disc_nome }} ({{ disc_frente }}) • {{ ass_nome }}</span
+      >
+      {% endfor %} {% for tg in q.tags %}
+      <span class="pill pill-neutral">{{ tg }}</span>
+      {% endfor %} {% if q.dificuldade == 'Facil' %}
+      <span class="pill pill-leaf">Fácil</span>
+      {% elif q.dificuldade == 'Media' %}
+      <span class="pill pill-sun">Média</span>
+      {% else %}
+      <span class="pill pill-coral">Difícil</span>
+      {% endif %} {% if q.id_questao in status_resolvidas %} {% if
+      status_resolvidas[q.id_questao] %}
+      <span
+        class="pill pill-leaf"
+        title="Você já acertou esta questão anteriormente"
+        >✓ Resolvida</span
+      >
+      {% else %}
+      <span class="pill pill-sun" title="Você tentou esta questão anteriormente"
+        >↻ Revisar</span
+      >
+      {% endif %} {% endif %}
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px">
+      <button
+        type="button"
+        class="btn-report-q"
+        id="btn-rep-{{ q.id_questao }}"
+        title="Sinalizar erro na questão (matéria, gabarito, gramática ou formatação)"
+        onclick="openReportModal({{ q.id_questao }})"
+      >
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="m3 11 18-5v12L3 14v-3z"></path>
+          <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="btn-select-q"
+        id="btn-sel-{{ q.id_questao }}"
+        onclick="toggleQuestionSelection({{ q.id_questao }})"
+      >
+        <span class="sel-icon">☐</span>
+        <span class="sel-label">Selecionar</span>
+      </button>
+      {% if usuario_logado.perfil == 'gestao' %}
+      <form
+        action="{{ url_for('deleteQuestionRoute', id_questao=q.id_questao) }}"
+        method="POST"
+        onsubmit="return confirm('Tem certeza que deseja excluir a questão Q{{ '%03d'|format(q.id_questao) }}?');"
+      >
+        <button
+          type="submit"
+          class="btn btn-danger"
+          style="min-height: 36px; padding: 6px 12px; font-size: 13px"
+        >
+          Excluir
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="question-enunciado">{{ q.enunciado|formatQuestionText|safe }}</div>
+
+  {% if q.midias %} {% for legenda, arquivo in q.midias %} {% if
+  arquivo.startswith('uploads/') %}
+  <figure style="margin-bottom: 18px">
+    <img
+      src="{{ url_for('static', filename=arquivo) }}"
+      alt="{{ legenda }}"
+      class="question-media-img"
+    />
+    {% if legenda %}
+    <figcaption style="font-size: 13px; color: var(--ink-subtle)">
+      {{ legenda }}
+    </figcaption>
+    {% endif %}
+  </figure>
+  {% elif arquivo.startswith('http://') or arquivo.startswith('https://') %}
+  <figure style="margin-bottom: 18px">
+    <img src="{{ arquivo }}" alt="{{ legenda }}" class="question-media-img" />
+    {% if legenda %}
+    <figcaption style="font-size: 13px; color: var(--ink-subtle)">
+      {{ legenda }}
+    </figcaption>
+    {% endif %}
+  </figure>
+  {% endif %} {% endfor %} {% endif %}
+
+  <div
+    class="options-list"
+    id="options-q-{{ q.id_questao }}"
+    data-tipo="{{ q.tipo }}"
+  >
+    {% for id_alt, val_prop, texto_alt, correta in q.alternativas %} {% set
+    rotulo_alt = ('%02d'|format(val_prop)) if q.tipo == 'Somatoria' else (['A',
+    'B', 'C', 'D', 'E'][(loop.index0) % 5]) %}
+    <div
+      class="option-tile"
+      data-valor="{{ val_prop }}"
+      data-rotulo="{{ rotulo_alt }}"
+      data-correta="{{ 'true' if correta else 'false' }}"
+      onclick="selectQuestionOption(this, {{ q.id_questao }}, '{{ q.tipo }}')"
+    >
+      <div class="option-badge">{{ rotulo_alt }}</div>
+      <div style="flex: 1">
+        {{ texto_alt|stripOptionPrefix|formatQuestionText|safe }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="question-actions">
+    <div class="soma-box">
+      {% if q.tipo == 'Somatoria' %} Somatória:
+      <strong id="soma-q-{{ q.id_questao }}">00</strong> {% else %} Alternativa:
+      <strong id="soma-q-{{ q.id_questao }}">-</strong>
+      {% endif %}
+    </div>
+
+    <div style="display: flex; gap: 10px; flex-wrap: wrap">
+      <button
+        type="button"
+        class="btn btn-owl"
+        id="btn-owl-toggle-{{ q.id_questao }}"
+        onclick="toggleOwlDrawer({{ q.id_questao }})"
+      >
+        <img src="{{ url_for('servePesLogo') }}" alt="Coruja PES" class="owl-btn-icon" />
+        <span>Pedir à Coruja{% if q.dicas %} ({{ q.dicas|length }}){% endif %}</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick="submitQuestionAnswer({{ q.id_questao }}, {{ q.soma_correta }}, '{{ q.tipo }}')"
+      >
+        Responder
+      </button>
+    </div>
+  </div>
+
+  <div class="feedback-strip" id="feedback-q-{{ q.id_questao }}"></div>
+
+  <div class="support-drawer owl-drawer" id="apoio-q-{{ q.id_questao }}">
+    <div class="owl-chat-row">
+      <div class="owl-mascot-col">
+        <img src="{{ url_for('servePesLogo') }}" alt="Coruja do PES" class="owl-mascot-avatar" />
+        <span class="owl-mascot-name">Coruja PES</span>
+      </div>
+
+      <div class="owl-speech-bubble">
+        <div class="owl-speech-top">
+          <div>
+            <strong style="font-family: var(--font-display); font-size: 15px; color: var(--leaf-deep);">
+              Oi! Posso te ajudar com esta questão?
+            </strong>
+          </div>
+          <button
+            type="button"
+            class="btn btn-leaf"
+            id="btn-ask-owl-{{ q.id_questao }}"
+            style="min-height: 34px; padding: 5px 14px; font-size: 13px;"
+            onclick="askOwlHint({{ q.id_questao }}, {{ 'true' if (q.dicas and usuario_logado.perfil in ['professor', 'gestao']) else 'false' }})"
+          >
+            {% if q.dicas and usuario_logado.perfil in ['professor', 'gestao'] %}
+              Gerar nova resposta
+            {% elif q.dicas %}
+              Ver resposta atualizada
+            {% else %}
+              Pedir dica e resolução
+            {% endif %}
+          </button>
+        </div>
+
+        <div id="owl-body-{{ q.id_questao }}">
+          {% if q.dicas %}
+            {% set dicas_iniciais = [] %}
+            {% set resolucoes_lista = [] %}
+            {% for tipo_dica, texto_dica in q.dicas %}
+              {% if 'dica' in tipo_dica|lower and 'resolu' not in tipo_dica|lower %}
+                {% set _ = dicas_iniciais.append((tipo_dica, texto_dica)) %}
+              {% else %}
+                {% set _ = resolucoes_lista.append((tipo_dica, texto_dica)) %}
+              {% endif %}
+            {% endfor %}
+
+            {% for tipo_dica, texto_dica in dicas_iniciais %}
+            <div class="owl-msg-section">
+              <span class="pill pill-leaf" style="margin-bottom: 6px">{{ tipo_dica }}</span>
+              <div style="font-size: 15px; color: var(--ink); line-height: 1.65">
+                {{ texto_dica|formatQuestionText|safe }}
+              </div>
+            </div>
+            {% endfor %}
+
+            {% if resolucoes_lista %}
+            <div class="owl-prompt-bar" id="owl-prompt-{{ q.id_questao }}">
+              <span style="font-size: 14px; color: var(--leaf-deep); font-weight: 700;">
+                Ainda ficou com dúvida? Quer que eu mostre a resolução comentada?
+              </span>
+              <button
+                type="button"
+                class="btn btn-outline"
+                style="min-height: 34px; padding: 5px 14px; font-size: 13px; border-color: var(--leaf); color: var(--leaf-deep);"
+                onclick="revealOwlSolution({{ q.id_questao }})"
+              >
+                Sim, quero a resolução comentada
+              </button>
+            </div>
+
+            <div class="owl-solution-box" id="owl-solution-{{ q.id_questao }}" style="display: none;">
+              {% for tipo_dica, texto_dica in resolucoes_lista %}
+              <div class="owl-msg-section">
+                <span class="pill pill-primary" style="margin-bottom: 6px">{{ tipo_dica }}</span>
+                <div style="font-size: 15px; color: var(--ink); line-height: 1.65">
+                  {{ texto_dica|formatQuestionText|safe }}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          {% else %}
+            <p style="font-size: 14px; color: var(--ink-muted); margin: 8px 0 0 0;">
+              Ainda não comentei esta questão! Clica em <strong>Pedir dica e resolução</strong> que eu te dou uma dica primeiro (sem dar spoiler da resposta!).
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+{% endfor %} {% if total_paginas > 1 %}
+<div
+  class="card"
+  style="
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 22px;
+    margin-bottom: 80px;
+  "
+>
+  {% if pagina > 1 %}
+  <a
+    href="{{ url_for('questionsPage', pagina=pagina-1, disciplina=f_disciplina, vestibular=f_vestibular, ano=f_ano, tipo=f_tipo, dificuldade=f_dificuldade, lista=f_lista, busca=termo_busca) }}"
+    class="btn btn-outline"
+  >
+    ← Anterior
+  </a>
+  {% else %}
+  <span></span>
+  {% endif %}
+
+  <span style="font-weight: 700; color: var(--ink-muted); font-size: 14px">
+    Página {{ pagina }} de {{ total_paginas }} ({{ total_encontradas }}
+    questões)
+  </span>
+
+  {% if pagina < total_paginas %}
+  <a
+    href="{{ url_for('questionsPage', pagina=pagina+1, disciplina=f_disciplina, vestibular=f_vestibular, ano=f_ano, tipo=f_tipo, dificuldade=f_dificuldade, lista=f_lista, busca=termo_busca) }}"
+    class="btn btn-primary"
+  >
+    Próxima →
+  </a>
+  {% else %}
+  <span></span>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="selection-dock" id="selection-dock">
+  <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+    <span
+      class="pill pill-code"
+      id="dock-count-badge"
+      style="font-size: 14px; padding: 6px 14px"
+      >0</span
+    >
+    <div>
+      <div
+        style="
+          font-family: var(--font-display);
+          font-weight: 800;
+          font-size: 16px;
+        "
+        id="dock-title"
+      >
+        Nenhuma questão selecionada
+      </div>
+      <div style="font-size: 12px; color: rgba(255, 255, 255, 0.72)">
+        Monte sua lista personalizada ou inicie um simulado cronometrado com
+        estas questões
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; flex-wrap: wrap">
+    <button
+      type="button"
+      class="btn btn-dock-secondary"
+      style="min-height: 40px; padding: 8px 14px; font-size: 13px"
+      onclick="clearSelection()"
+    >
+      Limpar
+    </button>
+    <button
+      type="button"
+      class="btn btn-primary"
+      style="min-height: 40px; padding: 8px 16px; font-size: 14px"
+      onclick="openCreateListModal()"
+    >
+      Criar Lista / Caderno
+    </button>
+    <button
+      type="button"
+      class="btn btn-green"
+      style="min-height: 40px; padding: 8px 16px; font-size: 14px"
+      onclick="startSelectedMockExam()"
+    >
+      Fazer Simulado Cronometrado
+    </button>
+  </div>
+</div>
+
+<div
+  class="modal-backdrop"
+  id="modal-criar-lista"
+  onclick="if (event.target === this) closeAllModals();"
+>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h3
+          style="
+            font-family: var(--font-display);
+            font-size: 20px;
+            color: var(--ink);
+          "
+        >
+          Finalizar Nova Lista
+        </h3>
+        <p
+          style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px"
+          id="modal-lista-sub"
+        >
+          Você selecionou 0 questões.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="closeAllModals()">
+        ×
+      </button>
+    </div>
+
+    <form
+      action="{{ url_for('createListRoute') }}"
+      method="POST"
+      onsubmit="handleListFormSubmit()"
+    >
+      <input type="hidden" name="origem" value="questoes" />
+      <input
+        type="hidden"
+        name="questoes_ids_csv"
+        id="input-lista-ids-csv"
+        value=""
+      />
+
+      <div style="margin-bottom: 16px">
+        <label class="field-label">Nome da lista ou caderno</label>
+        <input
+          type="text"
+          name="titulo"
+          id="input-lista-titulo"
+          placeholder="Ex: Revisão de Eletromagnetismo — UFSC"
+          required
+        />
+      </div>
+
+      {% if usuario_logado.perfil in ['professor', 'gestao'] %}
+      <div style="margin-bottom: 16px">
+        <label class="field-label">Visibilidade e Destino</label>
+        <div class="radio-card-group">
+          <label class="radio-card">
+            <input type="radio" name="publica" value="true" checked />
+            <div>
+              <strong>Adicionar como tarefa dos alunos</strong>
+              <span
+                >Fica disponível automaticamente para todos os estudantes das
+                Turmas A e B.</span
+              >
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="publica" value="false" />
+            <div>
+              <strong>Manter privada (apenas para mim)</strong>
+              <span>Visível somente na sua conta docente/gestão.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      {% else %}
+      <input type="hidden" name="publica" value="false" />
+      <div
+        style="
+          padding: 10px 14px;
+          background: var(--surface);
+          border: 1px solid var(--outline);
+          border-radius: 12px;
+          font-size: 13px;
+          color: var(--ink-muted);
+          margin-bottom: 16px;
+        "
+      >
+        Salvo como <strong>Caderno Pessoal (privado)</strong> na sua conta de
+        estudante.
+      </div>
+      {% endif %}
+
+      <div style="margin-bottom: 22px">
+        <label class="field-label">Deseja gerar o PDF automaticamente?</label>
+        <div class="radio-card-group">
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="salvar" checked />
+            <div>
+              <strong>Apenas salvar no portal</strong>
+              <span>Você poderá baixar o PDF depois quando quiser.</span>
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="pdf" />
+            <div>
+              <strong>Salvar e gerar PDF</strong>
+              <span>Baixa o arquivo formatado.</span>
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="acao_pos" value="pdf_gabarito" />
+            <div>
+              <strong>Salvar e gerar PDF + Gabarito</strong>
+              <span>Baixa o PDF incluindo o gabarito oficial ao final.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px">
+        <button type="button" class="btn btn-outline" onclick="closeAllModals()">
+          Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary">
+          Confirmar e Criar Lista
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div
+  class="modal-backdrop"
+  id="modal-reportar-questao"
+  onclick="if (event.target === this) closeAllModals();"
+>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h3
+          style="
+            font-family: var(--font-display);
+            font-size: 20px;
+            color: var(--ink);
+          "
+          id="rep-modal-titulo"
+        >
+          Sinalizar Problema na Questão
+        </h3>
+        <p style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px">
+          O aviso vai direto para a revisão dos professores e da Gestão.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="closeAllModals()">
+        ×
+      </button>
+    </div>
+
+    <form id="form-reportar-questao" onsubmit="submitQuestionReport(event)">
+      <input type="hidden" id="rep-id-questao" value="" />
+
+      <div style="margin-bottom: 16px">
+        <label class="field-label">O que precisa ser corrigido?</label>
+        <div class="radio-card-group">
+          <label class="check-card">
+            <input type="checkbox" name="motivos" value="materia" />
+            <div>
+              <strong>Matéria ou conteúdo incorreto</strong>
+              <span
+                >A disciplina, frente ou assunto classificado não corresponde à
+                questão.</span
+              >
+            </div>
+          </label>
+          <label class="check-card">
+            <input type="checkbox" name="motivos" value="gabarito" />
+            <div>
+              <strong>Erro no gabarito</strong>
+              <span
+                >A alternativa ou somatória marcada como correta está
+                incorreta.</span
+              >
+            </div>
+          </label>
+          <label class="check-card">
+            <input type="checkbox" name="motivos" value="gramatica" />
+            <div>
+              <strong>Erro de gramática ou digitação</strong>
+              <span
+                >Palavras cortadas, erros ortográficos ou texto
+                incompleto.</span
+              >
+            </div>
+          </label>
+          <label class="check-card">
+            <input type="checkbox" name="motivos" value="formatacao" />
+            <div>
+              <strong>Erro de formatação / equação / imagem</strong>
+              <span
+                >Fórmula matemática faltando, símbolo desconfigurado ou figura
+                ausente.</span
+              >
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 18px">
+        <label class="field-label">Detalhes (opcional)</label>
+        <textarea
+          id="rep-detalhes"
+          rows="2"
+          placeholder="Ex: Faltou a equação da parábola no enunciado / Esta questão é de Literatura..."
+        ></textarea>
+      </div>
+
+      <div
+        class="feedback-strip"
+        id="rep-feedback"
+        style="margin-top: 0; margin-bottom: 14px"
+      ></div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px">
+        <button type="button" class="btn btn-outline" onclick="closeAllModals()">
+          Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary" id="btn-enviar-report">
+          Enviar Sinalização
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div
+  class="modal-backdrop"
+  id="modal-simulado-aleatorio"
+  onclick="if (event.target === this) closeAllModals();"
+>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h3
+          style="
+            font-family: var(--font-display);
+            font-size: 20px;
+            color: var(--ink);
+          "
+        >
+          Montar Simulado Cronometrado
+        </h3>
+        <p style="font-size: 14px; color: var(--ink-subtle); margin-top: 2px">
+          O sistema sorteia as questões automaticamente.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="closeAllModals()">
+        ×
+      </button>
+    </div>
+
+    <form action="{{ url_for('mockExamPage') }}" method="GET">
+      <input type="hidden" name="modo" value="aleatorio" />
+
+      <div class="form-grid-2" style="margin-bottom: 14px">
+        <div>
+          <label class="field-label">Quantidade de questões</label>
+          <input
+            type="number"
+            name="qtd"
+            id="sim-qtd"
+            value="5"
+            min="1"
+            max="50"
+            required
+          />
+        </div>
+        <div>
+          <label class="field-label">Disciplina (opcional)</label>
+          <select name="disciplina">
+            <option value="">Todas as matérias</option>
+            {% for d in disciplinas_unicas %}
+            <option value="{{ d }}" {% if f_disciplina == d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-2" style="margin-bottom: 14px">
+        <div>
+          <label class="field-label">Vestibular (opcional)</label>
+          <select name="vestibular">
+            <option value="">Todos</option>
+            {% for v in vestibulares_unicos %}
+            <option value="{{ v }}" {% if f_vestibular == v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Ano (opcional)</label>
+          <select name="ano">
+            <option value="">Todos os anos</option>
+            {% for a in anos_unicos %}
+            <option value="{{ a }}" {% if f_ano == (a|string) %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px">
+        <label class="field-label">Formato (opcional)</label>
+        <select name="tipo">
+          <option value="">Todos</option>
+          <option value="Somatoria">Somatória</option>
+          <option value="Multipla Escolha">Múltipla Escolha</option>
+        </select>
+      </div>
+
+      <label
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 14px;
+          background: var(--leaf-soft);
+          border: 1px solid var(--leaf);
+          border-radius: 12px;
+          margin-bottom: 20px;
+          cursor: pointer;
+        "
+      >
+        <input
+          type="checkbox"
+          name="somente_ineditas"
+          value="1"
+          checked
+          style="
+            width: 18px;
+            height: 18px;
+            min-height: 18px;
+            accent-color: var(--leaf);
+          "
+        />
+        <div>
+          <div
+            style="font-weight: 700; font-size: 14px; color: var(--leaf-deep)"
+          >
+            Priorizar questões que ainda não resolvi
+          </div>
+          <div style="font-size: 12px; color: var(--ink-muted)">
+            {{ total_ineditas }} questão(ões) inédita(s) disponível(is) no
+            acervo atual.
+          </div>
+        </div>
+      </label>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px">
+        <button type="button" class="btn btn-outline" onclick="closeAllModals()">
+          Cancelar
+        </button>
+        <button type="submit" class="btn btn-green">Iniciar Simulado</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  const STORAGE_KEY = 'pes_questoes_selecionadas';
+  const inicioInteracao = {};
+
+  function loadSelection() {
+      try {
+          const raw = sessionStorage.getItem(STORAGE_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr.map(Number).filter(n => !isNaN(n)) : [];
+      } catch (e) {
+          return [];
+      }
+  }
+
+  function saveSelection(arr) {
+      try {
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+      } catch (e) {}
+  }
+
+  function updateSelectionUi() {
+      const selecionadas = loadSelection();
+      const setSel = new Set(selecionadas);
+
+      document.querySelectorAll('article[data-qid]').forEach(card => {
+          const qid = Number(card.getAttribute('data-qid'));
+          const btn = document.getElementById(`btn-sel-${qid}`);
+          const ativo = setSel.has(qid);
+          card.classList.toggle('question-card-selected', ativo);
+          if (btn) {
+              btn.classList.toggle('selected', ativo);
+              btn.querySelector('.sel-icon').textContent = ativo ? '✓' : '☐';
+              btn.querySelector('.sel-label').textContent = ativo ? 'Selecionada' : 'Selecionar';
+          }
+      });
+
+      const dock = document.getElementById('selection-dock');
+      const badge = document.getElementById('dock-count-badge');
+      const title = document.getElementById('dock-title');
+
+      if (selecionadas.length > 0) {
+          dock.classList.add('show');
+          badge.textContent = selecionadas.length;
+          title.textContent = selecionadas.length === 1
+              ? '1 questão selecionada'
+              : `${selecionadas.length} questões selecionadas`;
+      } else {
+          dock.classList.remove('show');
+      }
+  }
+
+  function toggleQuestionSelection(idQ) {
+      const lista = loadSelection();
+      const idx = lista.indexOf(idQ);
+      if (idx >= 0) {
+          lista.splice(idx, 1);
+      } else {
+          lista.push(idQ);
+      }
+      saveSelection(lista);
+      updateSelectionUi();
+  }
+
+  function selectAllPageQuestions() {
+      const lista = loadSelection();
+      const setSel = new Set(lista);
+      document.querySelectorAll('article[data-qid]').forEach(card => {
+          const qid = Number(card.getAttribute('data-qid'));
+          if (!setSel.has(qid)) {
+              lista.push(qid);
+              setSel.add(qid);
+          }
+      });
+      saveSelection(lista);
+      updateSelectionUi();
+  }
+
+  function clearSelection() {
+      saveSelection([]);
+      updateSelectionUi();
+  }
+
+  function openCreateListModal() {
+      const selecionadas = loadSelection();
+      if (selecionadas.length === 0) return;
+      document.getElementById('input-lista-ids-csv').value = selecionadas.join(',');
+      document.getElementById('modal-lista-sub').textContent =
+          selecionadas.length === 1
+              ? 'Sua lista será criada com 1 questão selecionada.'
+              : `Sua lista será criada com ${selecionadas.length} questões selecionadas.`;
+      document.getElementById('modal-criar-lista').classList.add('open');
+      setTimeout(() => document.getElementById('input-lista-titulo').focus(), 60);
+  }
+
+  function handleListFormSubmit() {
+      clearSelection();
+  }
+
+  function startSelectedMockExam() {
+      const selecionadas = loadSelection();
+      if (selecionadas.length === 0) return;
+      const ids = selecionadas.join(',');
+      clearSelection();
+      window.location.href = `/simulado?ids=${encodeURIComponent(ids)}`;
+  }
+
+  function openRandomMockExamModal() {
+      document.getElementById('modal-simulado-aleatorio').classList.add('open');
+  }
+
+  function openReportModal(idQ) {
+      document.getElementById('rep-id-questao').value = idQ;
+      document.getElementById('rep-modal-titulo').textContent = `Sinalizar Problema — Q${String(idQ).padStart(3, '0')}`;
+      document.querySelectorAll('#form-reportar-questao input[type="checkbox"]').forEach(c => { c.checked = false; });
+      document.getElementById('rep-detalhes').value = '';
+      const fb = document.getElementById('rep-feedback');
+      fb.className = 'feedback-strip';
+      fb.textContent = '';
+      document.getElementById('modal-reportar-questao').classList.add('open');
+  }
+
+  async function submitQuestionReport(ev) {
+      ev.preventDefault();
+      const idQ = document.getElementById('rep-id-questao').value;
+      const motivos = Array.from(document.querySelectorAll('#form-reportar-questao input[name="motivos"]:checked')).map(c => c.value);
+      const detalhes = document.getElementById('rep-detalhes').value.trim();
+      const fb = document.getElementById('rep-feedback');
+
+      if (motivos.length === 0) {
+          fb.className = 'feedback-strip show err';
+          fb.textContent = 'Selecione ao menos um tipo de problema.';
+          return;
+      }
+
+      const btn = document.getElementById('btn-enviar-report');
+      btn.disabled = true;
+      try {
+          const resp = await fetch(`/api/questoes/${idQ}/reportar`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ motivos, detalhes })
+          });
+          const data = await resp.json();
+          if (data.ok) {
+              fb.className = 'feedback-strip show ok';
+              fb.textContent = 'Obrigado! Questão sinalizada para revisão da equipe do PES.';
+              const iconBtn = document.getElementById(`btn-rep-${idQ}`);
+              if (iconBtn) iconBtn.classList.add('reported');
+              setTimeout(() => closeAllModals(), 900);
+          } else {
+              fb.className = 'feedback-strip show err';
+              fb.textContent = data.erro || 'Não foi possível enviar a sinalização.';
+          }
+      } catch (e) {
+          fb.className = 'feedback-strip show err';
+          fb.textContent = 'Erro de conexão ao enviar sinalização.';
+      } finally {
+          btn.disabled = false;
+      }
+  }
+
+  function closeAllModals() {
+      document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('open'));
+  }
+
+  function toggleListsPanel() {
+      const corpo = document.getElementById('corpo-painel-listas');
+      const btn = document.getElementById('btn-toggle-listas');
+      const oculto = corpo.style.display === 'none';
+      corpo.style.display = oculto ? 'block' : 'none';
+      btn.textContent = oculto ? 'Recolher listas' : 'Mostrar listas ({{ listas_visiveis|length }})';
+  }
+
+  function filterListCards() {
+      const cat = (document.getElementById('filtro-q-lista-cat')?.value || '').toLowerCase();
+      const perfil = (document.getElementById('filtro-q-lista-perfil')?.value || '').toLowerCase();
+      const status = (document.getElementById('filtro-q-lista-status')?.value || '').toLowerCase();
+      let visiveis = 0;
+
+      document.querySelectorAll('#grid-listas-banco .list-mini-card').forEach(card => {
+          const okCat = !cat || card.dataset.cat === cat;
+          const okPerfil = !perfil || card.dataset.perfil === perfil;
+          const okStatus = !status || card.dataset.status === status;
+          const mostrar = okCat && okPerfil && okStatus;
+          card.style.display = mostrar ? 'flex' : 'none';
+          if (mostrar) visiveis += 1;
+      });
+
+      const msgVazia = document.getElementById('msg-nenhuma-lista-filtro');
+      if (msgVazia) msgVazia.style.display = visiveis === 0 ? 'block' : 'none';
+  }
+
+  function selectQuestionOption(tile, idQ, tipo) {
+      if (!inicioInteracao[idQ]) {
+          inicioInteracao[idQ] = Date.now();
+      }
+      const lista = document.getElementById(`options-q-${idQ}`);
+      lista.querySelectorAll('.option-tile').forEach(el => {
+          el.classList.remove('correct-state', 'wrong-state');
+      });
+
+      if (tipo === 'Multipla Escolha') {
+          lista.querySelectorAll('.option-tile').forEach(el => el.classList.remove('selected'));
+          tile.classList.add('selected');
+      } else {
+          tile.classList.toggle('selected');
+      }
+
+      let soma = 0;
+      let label = '00';
+      const selecionadas = lista.querySelectorAll('.option-tile.selected');
+      selecionadas.forEach(el => {
+          soma += parseInt(el.getAttribute('data-valor'), 10);
+      });
+      if (tipo === 'Multipla Escolha') {
+          label = selecionadas.length ? selecionadas[0].getAttribute('data-rotulo') : '-';
+      } else {
+          label = String(soma).padStart(2, '0');
+      }
+      document.getElementById(`soma-q-${idQ}`).textContent = label;
+  }
+
+  async function submitQuestionAnswer(idQ, gabaritoNumerico, tipo) {
+      const lista = document.getElementById(`options-q-${idQ}`);
+      const selecionadas = lista.querySelectorAll('.option-tile.selected');
+      const fb = document.getElementById(`feedback-q-${idQ}`);
+
+      if (selecionadas.length === 0) {
+          fb.className = 'feedback-strip show err';
+          fb.textContent = 'Selecione ao menos uma alternativa ou proposição antes de responder.';
+          return;
+      }
+
+      let soma = 0;
+      let rotuloCorreto = String(gabaritoNumerico).padStart(2, '0');
+      let acertou = false;
+
+      if (tipo === 'Multipla Escolha') {
+          const tileEscolhido = selecionadas[0];
+          soma = parseInt(tileEscolhido.getAttribute('data-valor'), 10);
+          acertou = tileEscolhido.getAttribute('data-correta') === 'true';
+
+          lista.querySelectorAll('.option-tile').forEach(el => {
+              el.classList.remove('correct-state', 'wrong-state');
+              const isCorreta = el.getAttribute('data-correta') === 'true';
+              if (isCorreta) {
+                  rotuloCorreto = el.getAttribute('data-rotulo');
+                  el.classList.add('correct-state');
+              } else if (el.classList.contains('selected')) {
+                  el.classList.add('wrong-state');
+              }
+          });
+      } else {
+          lista.querySelectorAll('.option-tile').forEach(el => {
+              el.classList.remove('correct-state', 'wrong-state');
+              const marcada = el.classList.contains('selected');
+              const isCorreta = el.getAttribute('data-correta') === 'true';
+
+              if (marcada) {
+                  soma += parseInt(el.getAttribute('data-valor'), 10);
+                  el.classList.add(isCorreta ? 'correct-state' : 'wrong-state');
+              } else if (isCorreta) {
+                  el.classList.add('correct-state');
+              }
+          });
+          acertou = (soma === gabaritoNumerico);
+      }
+
+      fb.className = 'feedback-strip show ' + (acertou ? 'ok' : 'err');
+      if (acertou) {
+          fb.textContent = tipo === 'Multipla Escolha'
+              ? `Resposta correta! Alternativa ${rotuloCorreto}.`
+              : `Resposta correta! Somatória exata: ${rotuloCorreto}.`;
+      } else {
+          fb.textContent = tipo === 'Multipla Escolha'
+              ? `Resposta incorreta. Alternativa correta: ${rotuloCorreto}. Consulte a dica e resolução abaixo.`
+              : `Resposta incorreta. Você marcou ${String(soma).padStart(2, '0')} e a somatória oficial é ${rotuloCorreto}. Consulte a resolução abaixo.`;
+      }
+
+      const tempoEstimado = inicioInteracao[idQ]
+          ? Math.max(5, Math.min(900, Math.round((Date.now() - inicioInteracao[idQ]) / 1000)))
+          : 30;
+
+      try {
+          await fetch('/api/resolucao', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  id_questao: idQ,
+                  resposta_aluno: soma,
+                  acerto: acertou,
+                  tempo_gasto: tempoEstimado
+              })
+          });
+      } catch (e) {
+          console.error(e);
+      }
+  }
+
+  function toggleOwlDrawer(idQ) {
+      document.getElementById(`apoio-q-${idQ}`).classList.toggle('open');
+  }
+
+  function revealOwlSolution(idQ) {
+      const box = document.getElementById(`owl-solution-${idQ}`);
+      const promptBar = document.getElementById(`owl-prompt-${idQ}`);
+      if (!box) return;
+      box.style.display = 'block';
+      if (promptBar) promptBar.style.display = 'none';
+      if (typeof renderMathNow === 'function') {
+          renderMathNow(box);
+      }
+  }
+
+  async function askOwlHint(idQ, forceNew) {
+      const btn = document.getElementById(`btn-ask-owl-${idQ}`);
+      const body = document.getElementById(`owl-body-${idQ}`);
+      const toggleBtn = document.getElementById(`btn-owl-toggle-${idQ}`);
+      if (!body) return;
+
+      if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'A Coruja está pensando...';
+      }
+      body.innerHTML = `
+          <div class="owl-thinking-inline">
+              <span class="owl-dots"><span></span><span></span><span></span></span>
+              <span>Estou analisando a questão para te dar uma dica...</span>
+          </div>
+      `;
+
+      try {
+          const resp = await fetch(`/api/questoes/${idQ}/coruja`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ forcar: !!forceNew })
+          });
+          const data = await resp.json();
+          if (data.ok && Array.isArray(data.dicas) && data.dicas.length > 0) {
+              const hints = [];
+              const solutions = [];
+              data.dicas.forEach(item => {
+                  const t = (item.tipo || '').toLowerCase();
+                  if (t.includes('dica') && !t.includes('resolu')) {
+                      hints.push(item);
+                  } else {
+                      solutions.push(item);
+                  }
+              });
+
+              let htmlOut = hints.map(item => `
+                  <div class="owl-msg-section">
+                      <span class="pill pill-leaf" style="margin-bottom: 6px">${item.tipo}</span>
+                      <div style="font-size: 15px; color: var(--ink); line-height: 1.65">${item.html}</div>
+                  </div>
+              `).join('');
+
+              if (solutions.length > 0) {
+                  htmlOut += `
+                      <div class="owl-prompt-bar" id="owl-prompt-${idQ}">
+                          <span style="font-size: 14px; color: var(--leaf-deep); font-weight: 700;">
+                              Ainda ficou com dúvida? Quer que eu mostre a resolução comentada?
+                          </span>
+                          <button type="button" class="btn btn-outline" style="min-height: 34px; padding: 5px 14px; font-size: 13px; border-color: var(--leaf); color: var(--leaf-deep);" onclick="revealOwlSolution(${idQ})">
+                              Sim, quero a resolução comentada
+                          </button>
+                      </div>
+                      <div class="owl-solution-box" id="owl-solution-${idQ}" style="display: none;">
+                          ${solutions.map(item => `
+                              <div class="owl-msg-section">
+                                  <span class="pill pill-primary" style="margin-bottom: 6px">${item.tipo}</span>
+                                  <div style="font-size: 15px; color: var(--ink); line-height: 1.65">${item.html}</div>
+                              </div>
+                          `).join('')}
+                      </div>
+                  `;
+              }
+
+              body.innerHTML = htmlOut;
+              if (typeof renderMathNow === 'function') {
+                  renderMathNow(body);
+              }
+              if (toggleBtn) {
+                  const span = toggleBtn.querySelector('span');
+                  if (span) span.textContent = `Pedir à Coruja (${data.dicas.length})`;
+              }
+              if (btn) {
+                  btn.textContent = 'Dica pronta ✓';
+              }
+          } else {
+              body.innerHTML = `<div class="owl-empty-box"><p style="color: var(--coral-deep); margin: 0;">${data.erro || 'A Coruja não conseguiu responder agora. Tente novamente.'}</p></div>`;
+              if (btn) btn.textContent = 'Tentar novamente';
+          }
+      } catch (e) {
+          body.innerHTML = `<div class="owl-empty-box"><p style="color: var(--coral-deep); margin: 0;">Erro de conexão ao chamar a Coruja.</p></div>`;
+          if (btn) btn.textContent = 'Tentar novamente';
+      } finally {
+          if (btn) btn.disabled = false;
+      }
+  }
+
+  function restorePreviousStudentAnswers() {
+      document.querySelectorAll('article[data-prev-resp]').forEach(card => {
+          const idQ = Number(card.getAttribute('data-qid'));
+          const prevResp = parseInt(card.getAttribute('data-prev-resp'), 10);
+          const prevAcerto = card.getAttribute('data-prev-acerto') === 'true';
+          const tipo = card.getAttribute('data-tipo');
+          const gabarito = parseInt(card.getAttribute('data-gabarito'), 10);
+          const lista = document.getElementById(`options-q-${idQ}`);
+          const fb = document.getElementById(`feedback-q-${idQ}`);
+          const somaEl = document.getElementById(`soma-q-${idQ}`);
+          if (!lista || isNaN(prevResp)) return;
+
+          let rotuloCorreto = String(gabarito).padStart(2, '0');
+          let rotuloMarcado = '-';
+
+          lista.querySelectorAll('.option-tile').forEach(el => {
+              const val = parseInt(el.getAttribute('data-valor'), 10);
+              const isCorreta = el.getAttribute('data-correta') === 'true';
+              const rotulo = el.getAttribute('data-rotulo');
+              const marcada = (tipo === 'Multipla Escolha') ? (val === prevResp) : ((prevResp & val) === val);
+
+              if (isCorreta && tipo === 'Multipla Escolha') {
+                  rotuloCorreto = rotulo;
+              }
+              if (marcada) {
+                  el.classList.add('selected');
+                  rotuloMarcado = rotulo;
+                  el.classList.add(isCorreta ? 'correct-state' : 'wrong-state');
+              } else if (isCorreta) {
+                  el.classList.add('correct-state');
+              }
+          });
+
+          if (somaEl) {
+              somaEl.textContent = (tipo === 'Multipla Escolha') ? rotuloMarcado : String(prevResp).padStart(2, '0');
+          }
+          if (fb) {
+              fb.className = 'feedback-strip show ' + (prevAcerto ? 'ok' : 'err');
+              if (prevAcerto) {
+                  fb.textContent = (tipo === 'Multipla Escolha')
+                      ? `Na sua última tentativa você marcou ${rotuloMarcado} e acertou!`
+                      : `Na sua última tentativa você marcou ${String(prevResp).padStart(2, '0')} e acertou!`;
+              } else {
+                  fb.textContent = (tipo === 'Multipla Escolha')
+                      ? `Na sua última tentativa você marcou ${rotuloMarcado}. Alternativa correta: ${rotuloCorreto}. Clique em "Refazer questão" acima para tentar de novo.`
+                      : `Na sua última tentativa você marcou ${String(prevResp).padStart(2, '0')} (gabarito oficial: ${rotuloCorreto}). Clique em "Refazer questão" acima para tentar de novo.`;
+              }
+          }
+      });
+  }
+
+  function redoQuestion(idQ) {
+      const lista = document.getElementById(`options-q-${idQ}`);
+      const fb = document.getElementById(`feedback-q-${idQ}`);
+      const somaEl = document.getElementById(`soma-q-${idQ}`);
+      const banner = document.getElementById(`prev-banner-${idQ}`);
+      const card = document.getElementById(`questao-${idQ}`);
+      if (!lista) return;
+
+      lista.querySelectorAll('.option-tile').forEach(el => {
+          el.classList.remove('selected', 'correct-state', 'wrong-state');
+      });
+      if (fb) {
+          fb.className = 'feedback-strip';
+          fb.textContent = '';
+      }
+      if (somaEl) {
+          const tipo = card ? card.getAttribute('data-tipo') : 'Somatoria';
+          somaEl.textContent = tipo === 'Multipla Escolha' ? '-' : '00';
+      }
+      if (banner) {
+          banner.style.display = 'none';
+      }
+      inicioInteracao[idQ] = Date.now();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+      updateSelectionUi();
+      restorePreviousStudentAnswers();
+      document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeAllModals();
+      });
+      {% if baixar_pdf %}
+          const urlPdf = "{{ url_for('exportListPdf', id_lista=baixar_pdf, gabarito=1) if baixar_gab else url_for('exportListPdf', id_lista=baixar_pdf) }}";
+          setTimeout(() => { window.location.href = urlPdf; }, 350);
+      {% endif %}
+  });
+</script>
+{% endblock %}

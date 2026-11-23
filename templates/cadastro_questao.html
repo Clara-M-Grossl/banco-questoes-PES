@@ -1,0 +1,895 @@
+{% extends 'base.html' %} {% block title %}Cadastrar Questão — Cursinho PES{%
+endblock %} {% block page_title %}Cadastrar Questões{% endblock %} {% block
+page_subtitle %}Importe provas e questões automaticamente ou realize o cadastro
+manual{% endblock %} {% block topbar_actions %}
+<a href="{{ url_for('reviewQuestionsPage') }}" class="btn btn-outline">
+  Revisar Matérias / Conteúdos {% if pendentes_revisao > 0 %}
+  <span
+    class="pill pill-sun"
+    style="
+      margin-left: 6px;
+      padding: 2px 9px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    "
+    >{{ pendentes_revisao }}</span
+  >
+  {% endif %}
+</a>
+{% endblock %} {% block content %}
+<div class="tabs-inline">
+  <button
+    type="button"
+    class="btn btn-primary"
+    id="btn-tab-importar"
+    onclick="showMainTab('importar')"
+  >
+    Importar Questões
+  </button>
+  <button
+    type="button"
+    class="btn btn-outline"
+    id="btn-tab-manual"
+    onclick="showMainTab('manual')"
+  >
+    Cadastro Manual
+  </button>
+</div>
+
+<section class="card" id="painel-importar">
+  <div style="margin-bottom: 20px">
+    <label class="field-label">Origem / Método de Importação</label>
+    <select
+      id="select-origem-importacao"
+      onchange="updateImportSource()"
+      style="font-weight: 700"
+    >
+      {% if usuario_logado.perfil == 'gestao' %}
+      <option value="ufsc" selected>
+        Prova Inteira - (UFSC, ENEM, UDESC e outros)
+      </option>
+      <option value="enem">ENEM - (Prova inteira ou questão por número)</option>
+      {% else %}
+      <option value="enem" selected>
+        ENEM — Importar questão específica por número
+      </option>
+      {% endif %}
+
+      <option value="ia">Qualquer banca - Print, Foto ou PDF com IA</option>
+    </select>
+  </div>
+
+  <form
+    id="subform-enem"
+    action="{{ url_for('importEnemRoute') }}"
+    method="POST"
+    enctype="multipart/form-data"
+    style="{% if usuario_logado.perfil == 'gestao' %}display: none;{% endif %}"
+  >
+    <p style="color: var(--ink-muted); font-size: 14px; margin-bottom: 16px">
+      {% if usuario_logado.perfil == 'gestao' %} Importa diretamente da base
+      pública oficial do ENEM, separando automaticamente por
+      <strong>matéria, frente e conteúdo</strong> e sinalizando casos ambíguos
+      com a tag <em>Revisar Matéria</em>. {% else %} Busca diretamente da base
+      pública oficial do ENEM uma questão específica pelo número e ano. {% endif
+      %}
+    </p>
+
+    {% if usuario_logado.perfil == 'gestao' %}
+    <div class="form-grid-2" style="margin-bottom: 16px">
+      <div>
+        <label class="field-label">Ano da Prova ENEM</label>
+        <select name="ano_enem" required>
+          {% for ano in anos_enem %}
+          <option value="{{ ano }}">ENEM {{ ano }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">O que deseja importar?</label>
+        <select
+          name="modo_enem"
+          id="select-modo-enem"
+          onchange="updateEnemMode()"
+          required
+        >
+          <option value="inteira" selected>Prova inteira</option>
+          <option value="unica">
+            Uma questão específica (informar número e assunto)
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <div
+      id="campos-enem-inteira"
+      style="
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 18px;
+      "
+    >
+      <label class="field-label"
+        >Microdados oficiais do INEP (<code>ITENS_PROVA_AAAA.csv</code>) —
+        opcional</label
+      >
+      <input type="file" name="microdados_inep_csv" accept=".csv" />
+      <p style="font-size: 12px; color: var(--ink-subtle); margin-top: 6px">
+        Se anexado, usa o código oficial de Habilidade (H1–H30) do INEP em
+        conjunto com o classificador. Sem o CSV, o sistema classifica
+        automaticamente (maior chance de classificação errada).
+      </p>
+    </div>
+    {% else %}
+    <input type="hidden" name="modo_enem" value="unica" />
+    <div style="margin-bottom: 16px; max-width: 320px">
+      <label class="field-label">Ano da Prova ENEM</label>
+      <select name="ano_enem" required>
+        {% for ano in anos_enem %}
+        <option value="{{ ano }}">ENEM {{ ano }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div
+      id="campos-enem-unica"
+      style="display: {{ 'none' if usuario_logado.perfil == 'gestao' else 'block' }}; background: var(--surface); border: 1px solid var(--outline); border-radius: 14px; padding: 16px; margin-bottom: 18px;"
+    >
+      <div
+        style="display: grid; grid-template-columns: 160px 2fr 1fr; gap: 12px"
+      >
+        <div>
+          <label class="field-label">Nº da Questão (1 a 180)</label>
+          <input
+            type="number"
+            name="numero_questao"
+            id="input-num-enem"
+            min="1"
+            max="180"
+            placeholder="Ex: 95"
+            {% if usuario_logado.perfil != 'gestao' %}required{% endif %}
+          />
+        </div>
+        <div>
+          <label class="field-label">Disciplina / Frente / Assunto</label>
+          <select name="id_assunto" class="select-assunto-dinamico" onchange="handleTopicSelectChange(this)">
+            {% for id_a, d_nome, d_frente, a_nome in assuntos %}
+            <option value="{{ id_a }}">
+              {{ d_nome }} ({{ d_frente }}) — {{ a_nome }}
+            </option>
+            {% endfor %}
+            <option value="__novo__">+ Cadastrar novo conteúdo...</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Dificuldade</label>
+          <select name="dificuldade">
+            <option value="Facil">Fácil</option>
+            <option value="Media" selected>Média</option>
+            <option value="Dificil">Difícil</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button
+      type="submit"
+      class="btn btn-primary"
+      id="btn-submit-enem"
+      style="min-height: 48px"
+    >
+      {{ 'Importar Prova Inteira do ENEM' if usuario_logado.perfil == 'gestao'
+      else 'Importar Questão Específica do ENEM' }}
+    </button>
+  </form>
+
+  {% if usuario_logado.perfil == 'gestao' %}
+  <form
+    id="subform-ufsc"
+    action="{{ url_for('importExamPdfRoute') }}"
+    method="POST"
+    enctype="multipart/form-data"
+  >
+    <p style="color: var(--ink-muted); font-size: 14px; margin-bottom: 16px">
+      Envie o <strong>PDF da prova</strong> e o
+      <strong>PDF do gabarito oficial</strong>, escolha o vestibular (UFSC,
+      ENEM, UDESC ou outro).
+    </p>
+
+    <div class="form-grid-2" style="margin-bottom: 14px">
+      <label
+        for="pdf_prova"
+        class="dropzone"
+        style="display: block; margin-bottom: 0; padding: 24px 16px"
+      >
+        <svg
+          width="30"
+          height="30"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--primary)"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="margin-bottom: 8px"
+        >
+          <path
+            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          ></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        <div
+          style="font-weight: 700; font-size: 14px; color: var(--ink)"
+          id="nome-ufsc-label"
+        >
+          1. PDF da Prova Oficial (.pdf)
+        </div>
+        <span style="font-size: 12px; color: var(--ink-subtle)"
+          >Obrigatório (UFSC, ENEM, UDESC ou outro vestibular)</span
+        >
+        <input
+          type="file"
+          id="pdf_prova"
+          name="pdf_prova"
+          accept=".pdf"
+          required
+          style="display: none"
+          onchange="updateFileNameLabel(this, 'nome-ufsc-label')"
+        />
+      </label>
+
+      <label
+        for="pdf_gabarito"
+        class="dropzone"
+        style="display: block; margin-bottom: 0; padding: 24px 16px"
+      >
+        <svg
+          width="30"
+          height="30"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--leaf)"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="margin-bottom: 8px"
+        >
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <div
+          style="font-weight: 700; font-size: 14px; color: var(--ink)"
+          id="nome-gab-ufsc-label"
+        >
+          2. PDF do Gabarito Oficial (.pdf)
+        </div>
+        <span style="font-size: 12px; color: var(--ink-subtle)">Opcional</span>
+        <input
+          type="file"
+          id="pdf_gabarito"
+          name="pdf_gabarito"
+          accept=".pdf"
+          style="display: none"
+          onchange="updateFileNameLabel(this, 'nome-gab-ufsc-label')"
+        />
+      </label>
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 14px">
+      <div>
+        <label class="field-label"
+          >3. Qual Vestibular / Banca é esta prova?</label
+        >
+        <select
+          name="id_vestibular"
+          id="select-vest-ufsc"
+          onchange="handlePdfExamChange()"
+          required
+        >
+          {% for id_v, inst_v, ano_v, ed_v in vestibulares %}
+          <option value="{{ id_v }}" data-inst="{{ inst_v|upper }}" {% if loop.first %}selected{% endif %}>
+            {{ inst_v }} {{ ano_v }} — {{ ed_v }}
+          </option>
+          {% endfor %}
+          <option value="novo" data-inst="NOVO">
+            + Cadastrar novo vestibular...
+          </option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">4. Separação de Matéria e Conteúdo</label>
+        <select name="id_assunto" class="select-assunto-dinamico" data-prefix="SOMENTE: " onchange="handleTopicSelectChange(this)" required>
+          <option value="auto" selected>AUTOMÁTICA</option>
+          {% for id_a, d_nome, d_frente, a_nome in assuntos %}
+          <option value="{{ id_a }}">
+            SOMENTE: {{ d_nome }} ({{ d_frente }}) — {{ a_nome }}
+          </option>
+          {% endfor %}
+          <option value="__novo__">+ Cadastrar novo conteúdo...</option>
+        </select>
+      </div>
+    </div>
+
+    <div
+      id="novo-vest-ufsc"
+      style="
+        display: none;
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 14px;
+      "
+    >
+      <div
+        style="
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--primary);
+          margin-bottom: 10px;
+        "
+      >
+        Novo Vestibular
+      </div>
+      <div
+        style="display: grid; grid-template-columns: 1fr 120px 2fr; gap: 10px"
+      >
+        <div>
+          <label class="field-label">Instituição</label
+          ><input
+            type="text"
+            name="novo_vest_instituicao"
+            placeholder="Ex: UFSC, ENEM, UDESC, ACAFE"
+          />
+        </div>
+        <div>
+          <label class="field-label">Ano</label
+          ><input type="number" name="novo_vest_ano" placeholder="2026" />
+        </div>
+        <div>
+          <label class="field-label">Edição</label
+          ><input
+            type="text"
+            name="novo_vest_edicao"
+            placeholder="Ex: Vestibular de Verão 2026"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="box-csv-inep-pdf"
+      style="
+        display: none;
+        background: var(--leaf-soft);
+        border: 1px solid var(--leaf);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 14px;
+      "
+    >
+      <label class="field-label" style="color: var(--leaf-deep)"
+        >Microdados oficiais do INEP (<code>ITENS_PROVA_AAAA.csv</code>) —
+        opcional para ENEM</label
+      >
+      <input type="file" name="microdados_inep_csv" accept=".csv" />
+      <p style="font-size: 12px; color: var(--ink-muted); margin-top: 6px">
+        Aumenta a precisão da classificação do conteúdo.
+      </p>
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 18px">
+      <div>
+        <label class="field-label"
+          >Ou digite o gabarito manualmente (caso não envie o PDF do
+          gabarito)</label
+        >
+        <input
+          type="text"
+          name="gabarito_manual"
+          placeholder="Somatória: 1:05, 2:13  |  Múltipla Escolha: 1:A, 2:C, 3:E"
+        />
+      </div>
+      <div>
+        <label class="field-label">Dificuldade padrão</label>
+        <select name="dificuldade">
+          <option value="Facil">Fácil</option>
+          <option value="Media" selected>Média</option>
+          <option value="Dificil">Difícil</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="min-height: 48px">
+      Extrair Prova em PDF
+    </button>
+  </form>
+  {% endif %}
+
+  <form
+    id="subform-ia"
+    action="{{ url_for('importFileRoute') }}"
+    method="POST"
+    enctype="multipart/form-data"
+    style="display: none"
+  >
+    <p style="color: var(--ink-muted); font-size: 14px; margin-bottom: 16px">
+      Ideal para prints, fotos ou provas de qualquer vestibular.
+    </p>
+
+    <label for="arquivo_prova" class="dropzone" style="display: block">
+      <svg
+        width="34"
+        height="34"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--primary)"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        style="margin-bottom: 8px"
+      >
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <div
+        style="font-weight: 700; font-size: 15px; color: var(--ink)"
+        id="nome-arquivo-label"
+      >
+        Clique para selecionar um arquivo PDF ou imagem (.pdf, .png, .jpg,
+        .webp)
+      </div>
+      <span style="font-size: 13px; color: var(--ink-subtle)"></span>
+      <input
+        type="file"
+        id="arquivo_prova"
+        name="arquivo_prova"
+        accept=".pdf,.png,.jpg,.jpeg,.webp"
+        required
+        style="display: none"
+        onchange="updateFileNameLabel(this, 'nome-arquivo-label')"
+      />
+    </label>
+
+    <div class="form-grid-2" style="margin-bottom: 14px">
+      <div>
+        <label class="field-label">Disciplina / Frente / Assunto</label>
+        <select name="id_assunto" class="select-assunto-dinamico" onchange="handleTopicSelectChange(this)" required>
+          <option value="auto" selected>Detectar automaticamente</option>
+          {% for id_a, d_nome, d_frente, a_nome in assuntos %}
+          <option value="{{ id_a }}">
+            {{ d_nome }} ({{ d_frente }}) — {{ a_nome }}
+          </option>
+          {% endfor %}
+          <option value="__novo__">+ Cadastrar novo conteúdo...</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Vestibular / Origem</label>
+        <select
+          name="id_vestibular"
+          id="select-vest-arquivo"
+          onchange="toggleNewExamFields('arquivo')"
+          required
+        >
+          {% for id_v, inst_v, ano_v, ed_v in vestibulares %}
+          <option value="{{ id_v }}">
+            {{ inst_v }} {{ ano_v }} — {{ ed_v }}
+          </option>
+          {% endfor %}
+          <option value="novo">+ Cadastrar novo vestibular...</option>
+        </select>
+      </div>
+    </div>
+
+    <div
+      id="novo-vest-arquivo"
+      style="
+        display: none;
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 14px;
+      "
+    >
+      <div
+        style="
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--primary);
+          margin-bottom: 10px;
+        "
+      >
+        Novo Vestibular
+      </div>
+      <div
+        style="display: grid; grid-template-columns: 1fr 120px 2fr; gap: 10px"
+      >
+        <div>
+          <label class="field-label">Instituição</label
+          ><input
+            type="text"
+            name="novo_vest_instituicao"
+            placeholder="Ex: UFSC, ENEM, UDESC"
+          />
+        </div>
+        <div>
+          <label class="field-label">Ano</label
+          ><input type="number" name="novo_vest_ano" placeholder="2026" />
+        </div>
+        <div>
+          <label class="field-label">Edição</label
+          ><input
+            type="text"
+            name="novo_vest_edicao"
+            placeholder="Ex: Vestibular Unificado 2026"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 18px">
+      <div>
+        <label class="field-label">Gabarito oficial (opcional)</label>
+        <input
+          type="text"
+          name="gabarito_ia"
+          placeholder="Ex: 25 (Somatória) ou C (Múltipla Escolha) ou 1:A, 2:D"
+        />
+      </div>
+      <div>
+        <label class="field-label"
+          >Recorte da figura / gráfico da questão (opcional)</label
+        >
+        <input type="file" name="figura_midia" accept=".png,.jpg,.jpeg,.webp" />
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="min-height: 48px">
+      Processar Arquivo e Cadastrar Questões
+    </button>
+  </form>
+</section>
+
+<section class="card" id="painel-manual" style="display: none">
+  <h2
+    style="
+      font-family: var(--font-display);
+      font-size: 20px;
+      margin-bottom: 8px;
+    "
+  >
+    Cadastro Manual de Questão
+  </h2>
+  <p style="color: var(--ink-muted); font-size: 14px; margin-bottom: 18px">
+    Redija uma questão autoral ou insira manualmente os campos no banco de
+    dados.
+  </p>
+
+  <form
+    action="{{ url_for('createManualQuestionRoute') }}"
+    method="POST"
+    enctype="multipart/form-data"
+  >
+    <div class="form-grid-2" style="margin-bottom: 14px">
+      <div>
+        <label class="field-label">Disciplina / Frente / Assunto</label>
+        <select name="id_assunto" class="select-assunto-dinamico" onchange="handleTopicSelectChange(this)" required>
+          {% for id_a, d_nome, d_frente, a_nome in assuntos %}
+          <option value="{{ id_a }}">
+            {{ d_nome }} ({{ d_frente }}) — {{ a_nome }}
+          </option>
+          {% endfor %}
+          <option value="__novo__">+ Cadastrar novo conteúdo...</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Vestibular / Origem</label>
+        <select
+          name="id_vestibular"
+          id="select-vest-manual"
+          onchange="toggleNewExamFields('manual')"
+          required
+        >
+          <option value="autoral">Autoral — Questão do Cursinho PES</option>
+          {% for id_v, inst_v, ano_v, ed_v in vestibulares %}
+          <option value="{{ id_v }}">
+            {{ inst_v }} {{ ano_v }} — {{ ed_v }}
+          </option>
+          {% endfor %}
+          <option value="novo">+ Cadastrar novo vestibular...</option>
+        </select>
+      </div>
+    </div>
+
+    <div
+      id="novo-vest-manual"
+      style="
+        display: none;
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 14px;
+      "
+    >
+      <div
+        style="
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--primary);
+          margin-bottom: 10px;
+        "
+      >
+        Novo Vestibular
+      </div>
+      <div
+        style="display: grid; grid-template-columns: 1fr 120px 2fr; gap: 10px"
+      >
+        <div>
+          <label class="field-label">Instituição</label
+          ><input
+            type="text"
+            name="novo_vest_instituicao"
+            placeholder="Ex: UFSC, ENEM, UDESC"
+          />
+        </div>
+        <div>
+          <label class="field-label">Ano</label
+          ><input type="number" name="novo_vest_ano" placeholder="2026" />
+        </div>
+        <div>
+          <label class="field-label">Edição</label
+          ><input
+            type="text"
+            name="novo_vest_edicao"
+            placeholder="Ex: Vestibular Unificado 2026"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 14px">
+      <div>
+        <label class="field-label">Modalidade</label>
+        <select
+          name="tipo"
+          id="select-tipo-questao"
+          onchange="updateQuestionFormat()"
+          required
+        >
+          <option value="Somatoria">Somatória (01, 02, 04, 08...)</option>
+          <option value="Multipla Escolha">
+            Múltipla Escolha (A, B, C, D, E)
+          </option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Dificuldade</label>
+        <select name="dificuldade" required>
+          <option value="Facil">Fácil</option>
+          <option value="Media" selected>Média</option>
+          <option value="Dificil">Difícil</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 16px">
+      <label class="field-label">Enunciado</label>
+      <textarea
+        name="enunciado"
+        rows="4"
+        placeholder="Digite o enunciado da questão..."
+        required
+      ></textarea>
+    </div>
+
+    <div style="margin-bottom: 16px">
+      <label class="field-label">Imagem (opcional)</label>
+      <input type="file" name="imagem_midia" accept=".png,.jpg,.jpeg,.webp" />
+    </div>
+
+    <div style="margin-bottom: 18px">
+      <label class="field-label" id="rotulo-secao-alternativas"
+        >Proposições (marque as corretas)</label
+      >
+      {% for val_p in [1, 2, 4, 8, 16, 32, 64] %}
+      <div
+        class="linha-alternativa"
+        data-valor="{{ val_p }}"
+        data-indice="{{ loop.index0 }}"
+        style="
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="option-badge rotulo-alternativa"
+          >{{ '%02d'|format(val_p) }}</span
+        >
+        <input
+          type="text"
+          name="prop_texto_{{ val_p }}"
+          placeholder="Texto da proposição..."
+        />
+        <label
+          style="
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            white-space: nowrap;
+          "
+        >
+          <input
+            type="checkbox"
+            name="prop_correta_{{ val_p }}"
+            class="chk-correta"
+            style="width: 18px; min-height: 18px"
+            onchange="ensureSingleCorrectOption(this)"
+          />
+          Correta
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 20px">
+      <div>
+        <label class="field-label">Dica inicial (opcional)</label>
+        <textarea
+          name="dica_inicial"
+          rows="2"
+          placeholder="Orientação inicial para o aluno..."
+        ></textarea>
+      </div>
+      <div>
+        <label class="field-label">Resolução passo a passo (opcional)</label>
+        <textarea
+          name="resolucao_passo"
+          rows="2"
+          placeholder="Explicação completa da resposta..."
+        ></textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="min-height: 48px">
+      Salvar Questão
+    </button>
+  </form>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  function showMainTab(aba) {
+    const isImportar = aba === "importar";
+    document.getElementById("painel-importar").style.display = isImportar
+      ? "block"
+      : "none";
+    document.getElementById("painel-manual").style.display = isImportar
+      ? "none"
+      : "block";
+    document.getElementById("btn-tab-importar").className = isImportar
+      ? "btn btn-primary"
+      : "btn btn-outline";
+    document.getElementById("btn-tab-manual").className = isImportar
+      ? "btn btn-outline"
+      : "btn btn-primary";
+  }
+
+  function updateImportSource() {
+    const origem = document.getElementById("select-origem-importacao").value;
+    ["enem", "ufsc", "ia"].forEach((o) => {
+      const el = document.getElementById("subform-" + o);
+      if (el) el.style.display = o === origem ? "block" : "none";
+    });
+  }
+
+  function updateFileNameLabel(input, labelId) {
+    const label = document.getElementById(labelId);
+    const dropzone = input.closest(".dropzone");
+    if (input.files && input.files.length > 0) {
+      label.textContent = "✓ Arquivo anexado: " + input.files[0].name;
+      if (dropzone) dropzone.classList.add("has-file");
+    } else {
+      if (dropzone) dropzone.classList.remove("has-file");
+    }
+  }
+
+  function toggleNewExamFields(prefixo) {
+    const sel = document.getElementById("select-vest-" + prefixo);
+    const box = document.getElementById("novo-vest-" + prefixo);
+    const isNovo = sel.value === "novo";
+    box.style.display = isNovo ? "block" : "none";
+    box.querySelectorAll("input").forEach((inp) => {
+      inp.required = isNovo;
+    });
+  }
+
+  function handlePdfExamChange() {
+    toggleNewExamFields("ufsc");
+    const sel = document.getElementById("select-vest-ufsc");
+    const boxCsv = document.getElementById("box-csv-inep-pdf");
+    if (!sel || !boxCsv) return;
+    const opt = sel.options[sel.selectedIndex];
+    const inst = (opt ? opt.getAttribute("data-inst") || "" : "").toUpperCase();
+    boxCsv.style.display = inst === "ENEM" ? "block" : "none";
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    handlePdfExamChange();
+  });
+
+  function updateEnemMode() {
+    const unica = document.getElementById("select-modo-enem").value === "unica";
+    document.getElementById("campos-enem-unica").style.display = unica
+      ? "block"
+      : "none";
+    const blocoInteira = document.getElementById("campos-enem-inteira");
+    if (blocoInteira) blocoInteira.style.display = unica ? "none" : "block";
+    document.getElementById("input-num-enem").required = unica;
+    document.getElementById("btn-submit-enem").textContent = unica
+      ? "Importar Questão Específica do ENEM"
+      : "Importar Prova Inteira do ENEM";
+  }
+
+  function updateQuestionFormat() {
+    const multipla =
+      document.getElementById("select-tipo-questao").value ===
+      "Multipla Escolha";
+    const letras = ["A", "B", "C", "D", "E"];
+
+    document.getElementById("rotulo-secao-alternativas").textContent = multipla
+      ? "Alternativas (marque a única correta)"
+      : "Proposições (marque as corretas)";
+
+    document.querySelectorAll(".linha-alternativa").forEach((linha) => {
+      const idx = parseInt(linha.dataset.indice, 10);
+      const valor = parseInt(linha.dataset.valor, 10);
+      const badge = linha.querySelector(".rotulo-alternativa");
+      const campo = linha.querySelector('input[type="text"]');
+
+      if (multipla) {
+        linha.style.display = idx < 5 ? "flex" : "none";
+        badge.textContent = letras[idx] || "";
+        campo.placeholder =
+          "Texto da alternativa " + (letras[idx] || "") + "...";
+        if (idx >= 5) {
+          campo.value = "";
+          linha.querySelector(".chk-correta").checked = false;
+        }
+      } else {
+        linha.style.display = "flex";
+        badge.textContent = String(valor).padStart(2, "0");
+        campo.placeholder =
+          "Texto da proposição " + String(valor).padStart(2, "0") + "...";
+      }
+    });
+
+    if (multipla) {
+      const marcadas = document.querySelectorAll(".chk-correta:checked");
+      marcadas.forEach((c, i) => {
+        if (i > 0) c.checked = false;
+      });
+    }
+  }
+
+  function ensureSingleCorrectOption(chk) {
+    if (
+      document.getElementById("select-tipo-questao").value !==
+      "Multipla Escolha"
+    )
+      return;
+    if (chk.checked) {
+      document.querySelectorAll(".chk-correta").forEach((c) => {
+        if (c !== chk) c.checked = false;
+      });
+    }
+  }
+</script>
+{% include '_modal_novo_conteudo.html' %}
+{% endblock %}
